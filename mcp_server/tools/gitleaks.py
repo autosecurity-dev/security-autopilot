@@ -1,9 +1,7 @@
 """Gitleaks scanner wrapper.
 
 Detects secrets and credentials in the working tree (no git history required).
-Requires gitleaks: https://github.com/gitleaks/gitleaks
-  macOS:  brew install gitleaks
-  Linux:  see https://github.com/gitleaks/gitleaks#installing
+Gitleaks is installed automatically if not present.
 """
 from __future__ import annotations
 
@@ -13,19 +11,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-
-async def _is_installed() -> bool:
-    """Return True if the gitleaks binary is available on PATH."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "gitleaks", "version",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.communicate()
-        return proc.returncode == 0
-    except FileNotFoundError:
-        return False
+from .installer import ensure_installed
 
 
 def _finding(leak: dict) -> dict:
@@ -66,16 +52,16 @@ async def scan(project_path: str) -> list[dict]:
     Writes the report to a temp file to avoid stdout/stderr interleaving issues.
     Returns an info finding (not a crash) if gitleaks is not installed.
     """
-    if not await _is_installed():
+    if not await ensure_installed("gitleaks"):
         return [{
             "id": str(uuid.uuid4()),
             "scanner": "gitleaks",
             "severity": "info",
-            "title": "Gitleaks not installed — secret scan skipped",
-            "description": "Install gitleaks to enable scanning for exposed credentials and secrets.",
+            "title": "Gitleaks could not be installed — secret scan skipped",
+            "description": "Auto-install failed. Please install gitleaks manually.",
             "file": None,
             "line": None,
-            "remediation": "macOS: `brew install gitleaks`  |  see https://github.com/gitleaks/gitleaks#installing",
+            "remediation": "macOS: `brew install gitleaks`  |  https://github.com/gitleaks/gitleaks#installing",
             "references": ["https://github.com/gitleaks/gitleaks"],
         }]
 

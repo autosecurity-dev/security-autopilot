@@ -1,8 +1,7 @@
 """Semgrep scanner wrapper.
 
 Runs semgrep with the auto ruleset for SAST (static analysis) findings.
-Requires semgrep: https://semgrep.dev/docs/getting-started/
-  macOS/Linux: pip install semgrep  (or: brew install semgrep)
+Semgrep is installed automatically if not present.
 """
 from __future__ import annotations
 
@@ -10,25 +9,13 @@ import asyncio
 import json
 import uuid
 
+from .installer import ensure_installed
+
 SEVERITY_MAP = {
     "ERROR":   "high",
     "WARNING": "medium",
     "INFO":    "info",
 }
-
-
-async def _is_installed() -> bool:
-    """Return True if the semgrep binary is available on PATH."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "semgrep", "--version",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.communicate()
-        return proc.returncode == 0
-    except FileNotFoundError:
-        return False
 
 
 def _finding(result: dict) -> dict:
@@ -70,13 +57,13 @@ async def scan(project_path: str) -> list[dict]:
 
     Returns an info finding (not a crash) if semgrep is not installed.
     """
-    if not await _is_installed():
+    if not await ensure_installed("semgrep"):
         return [{
             "id": str(uuid.uuid4()),
             "scanner": "semgrep",
             "severity": "info",
-            "title": "Semgrep not installed — SAST scan skipped",
-            "description": "Install semgrep to enable static analysis security testing.",
+            "title": "Semgrep could not be installed — SAST scan skipped",
+            "description": "Auto-install failed. Please install semgrep manually.",
             "file": None,
             "line": None,
             "remediation": "`pip install semgrep`  or  `brew install semgrep`",

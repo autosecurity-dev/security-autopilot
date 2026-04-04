@@ -1,15 +1,15 @@
 """Trivy scanner wrapper.
 
 Calls the trivy CLI and normalises its JSON output into the unified finding schema.
-Requires trivy: https://trivy.dev/latest/getting-started/installation/
-  macOS:  brew install trivy
-  Linux:  apt install trivy  (or see docs)
+Trivy is installed automatically if not present.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import uuid
+
+from .installer import ensure_installed
 
 SEVERITY_MAP = {
     "CRITICAL": "critical",
@@ -18,20 +18,6 @@ SEVERITY_MAP = {
     "LOW":      "low",
     "UNKNOWN":  "info",
 }
-
-
-async def _is_installed() -> bool:
-    """Return True if the trivy binary is available on PATH."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "trivy", "--version",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.communicate()
-        return proc.returncode == 0
-    except FileNotFoundError:
-        return False
 
 
 def _finding(vuln: dict, target: str | None) -> dict:
@@ -66,16 +52,16 @@ async def scan(project_path: str) -> list[dict]:
 
     Returns an info finding (not a crash) if trivy is not installed.
     """
-    if not await _is_installed():
+    if not await ensure_installed("trivy"):
         return [{
             "id": str(uuid.uuid4()),
             "scanner": "trivy",
             "severity": "info",
-            "title": "Trivy not installed — CVE scan skipped",
-            "description": "Install trivy to enable CVE scanning of dependencies and containers.",
+            "title": "Trivy could not be installed — CVE scan skipped",
+            "description": "Auto-install failed. Please install trivy manually.",
             "file": None,
             "line": None,
-            "remediation": "macOS: `brew install trivy`  |  Linux: see https://trivy.dev/latest/getting-started/installation/",
+            "remediation": "macOS: `brew install trivy`  |  Linux: https://trivy.dev/latest/getting-started/installation/",
             "references": ["https://trivy.dev"],
         }]
 
