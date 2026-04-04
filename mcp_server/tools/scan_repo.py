@@ -2,52 +2,92 @@
 from __future__ import annotations
 
 import asyncio
+import time
+import uuid
 from pathlib import Path
 
 from . import supply_chain, trivy, gitleaks, semgrep
 
+SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
-VALID_CHECKS = {"all", "supply_chain", "trivy", "gitleaks", "semgrep"}
+_SCANNER_MAP = {
+    "supply_chain": supply_chain,
+    "trivy":        trivy,
+    "gitleaks":     gitleaks,
+    "semgrep":      semgrep,
+}
+
+
+def _deduplicate(findings: list[dict]) -> list[dict]:
+    """Remove duplicate findings by (scanner, title, file) key."""
+    seen: set[tuple] = set()
+    unique = []
+    for f in findings:
+        key = (f.get("scanner"), f.get("title"), f.get("file"))
+        if key not in seen:
+            seen.add(key)
+            unique.append(f)
+    return unique
+
+
+def _sort_by_severity(findings: list[dict]) -> list[dict]:
+    """Sort findings critical → high → medium → low → info."""
+    return sorted(findings, key=lambda f: SEVERITY_ORDER.get(f.get("severity", "info"), 4))
 
 
 async def scan_repo(path: str, checks: list[str] | None = None) -> dict:
-    """Run all requested scanners against a project directory.
+    """Run all requested scanners in parallel against a project directory.
 
     Args:
         path: Absolute path to the project root.
-        checks: List of scanner names to run. Defaults to ["all"].
+        checks: Scanner names to run. Defaults to ["all"].
 
     Returns:
-        Dict with keys: path, findings (list), summary (counts by severity).
+        Dict with keys: summary, findings, top_priority.
     """
     if not checks:
         checks = ["all"]
 
     run_all = "all" in checks
-    tasks = []
+    scanners_to_run = {
+        name: mod
+        for name, mod in _SCANNER_MAP.items()
+        if run_all or name in checks
+    }
 
-    if run_all or "supply_chain" in checks:
-        tasks.append(supply_chain.scan(path))
-    if run_all or "trivy" in checks:
-        tasks.append(trivy.scan(path))
-    if run_all or "gitleaks" in checks:
-        tasks.append(gitleaks.scan(path))
-    if run_all or "semgrep" in checks:
-        tasks.append(semgrep.scan(path))
+    start = time.monotonic()
+    results = await asyncio.gather(
+        *[mod.scan(path) for mod in scanners_to_run.values()],
+        return_exceptions=True,
+    )
+    duration = round(time.monotonic() - start, 2)
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    all_findings = []
+    all_findings: list[dict] = []
     for result in results:
         if isinstance(result, list):
             all_findings.extend(result)
 
-    summary = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-    for f in all_findings:
-        sev = f.get("severity", "info")
-        summary[sev] = summary.get(sev, 0) + 1
+    all_findings = _sort_by_severity(_deduplicate(all_findings))
 
-    return {"path": path, "findings": all_findings, "summary": summary}
+    counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for f in all_findings:
+        counts[f.get("severity", "info")] = counts.get(f.get("severity", "info"), 0) + 1
+
+    top_priority = next(
+        (f for f in all_findings if f.get("severity") in ("critical", "high")),
+        None,
+    )
+
+    return {
+        "summary": {
+            **counts,
+            "scanners_run": list(scanners_to_run.keys()),
+            "scan_duration_seconds": duration,
+            "scanned_path": path,
+        },
+        "findings": all_findings,
+        "top_priority": top_priority,
+    }
 
 
 async def scan_file(filepath: str) -> dict:
@@ -57,21 +97,39 @@ async def scan_file(filepath: str) -> dict:
         filepath: Absolute path to the file.
 
     Returns:
-        Dict with keys: file, findings (list), summary (counts by severity).
+        Dict with keys: summary, findings, top_priority.
     """
     path = Path(filepath)
-    findings = []
+    findings: list[dict] = []
 
-    # Supply chain covers package.json / package-lock.json / requirements.txt
+    tasks = []
     if path.name in ("package.json", "package-lock.json", "requirements.txt"):
-        findings.extend(await supply_chain.scan(str(path.parent)))
+        tasks.append(supply_chain.scan(str(path.parent)))
+    tasks.append(semgrep.scan(filepath))
 
-    # Semgrep can scan any source file
-    findings.extend(await semgrep.scan(filepath))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for result in results:
+        if isinstance(result, list):
+            findings.extend(result)
 
-    summary = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    findings = _sort_by_severity(_deduplicate(findings))
+
+    counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     for f in findings:
-        sev = f.get("severity", "info")
-        summary[sev] = summary.get(sev, 0) + 1
+        counts[f.get("severity", "info")] = counts.get(f.get("severity", "info"), 0) + 1
 
-    return {"file": filepath, "findings": findings, "summary": summary}
+    top_priority = next(
+        (f for f in findings if f.get("severity") in ("critical", "high")),
+        None,
+    )
+
+    return {
+        "summary": {
+            **counts,
+            "scanners_run": ["supply_chain", "semgrep"],
+            "scan_duration_seconds": 0,
+            "scanned_path": filepath,
+        },
+        "findings": findings,
+        "top_priority": top_priority,
+    }

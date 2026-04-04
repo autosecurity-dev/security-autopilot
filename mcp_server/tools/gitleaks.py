@@ -1,39 +1,57 @@
 """Gitleaks scanner wrapper.
 
-Calls the gitleaks CLI to detect secrets and credentials committed to git history
-or present in the working tree.
+Detects secrets and credentials in the working tree (no git history required).
 Requires gitleaks: https://github.com/gitleaks/gitleaks
+  macOS:  brew install gitleaks
+  Linux:  see https://github.com/gitleaks/gitleaks#installing
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import uuid
 from pathlib import Path
 
 
-def _finding(leak: dict, project_path: str) -> dict:
-    """Normalise a single Gitleaks finding into the unified schema."""
+async def _is_installed() -> bool:
+    """Return True if the gitleaks binary is available on PATH."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "gitleaks", "version",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.communicate()
+        return proc.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def _finding(leak: dict) -> dict:
+    """Normalise a single Gitleaks result into the unified finding schema."""
     rule = leak.get("RuleID", "secret-detected")
-    file = leak.get("File")
+    file = leak.get("File", "unknown")
     line = leak.get("StartLine")
-    secret_preview = (leak.get("Secret") or "")[:8] + "..." if leak.get("Secret") else "redacted"
+    secret_raw = leak.get("Secret") or ""
+    preview = (secret_raw[:8] + "...") if len(secret_raw) > 8 else "redacted"
 
     return {
         "id": str(uuid.uuid4()),
         "scanner": "gitleaks",
         "severity": "high",
-        "title": f"Secret detected: {rule}",
+        "title": f"Exposed {rule} secret in {file}",
         "description": (
-            f"A potential secret was found matching rule `{rule}`. "
-            f"Preview: `{secret_preview}`. Commit: {leak.get('Commit', 'working tree')[:8]}."
+            f"A `{rule}` credential was found in `{file}` "
+            f"(line {line}). Preview: `{preview}`. "
+            f"Commit: {(leak.get('Commit') or 'working tree')[:8]}."
         ),
         "file": file,
         "line": line,
         "remediation": (
-            "1. Revoke and rotate the exposed credential immediately.\n"
-            "2. Remove the secret from git history using `git filter-repo` or BFG.\n"
-            "3. Add the file to .gitignore to prevent future commits."
+            f"1. Rotate this credential immediately — assume it is compromised.\n"
+            f"2. Add `{file}` to .gitignore to prevent future commits.\n"
+            f"3. If committed to git history, purge with `git filter-repo --path {file} --invert-paths`."
         ),
         "references": [
             "https://github.com/gitleaks/gitleaks",
@@ -43,33 +61,48 @@ def _finding(leak: dict, project_path: str) -> dict:
 
 
 async def scan(project_path: str) -> list[dict]:
-    """Run gitleaks detect against project_path and return normalised findings.
+    """Run gitleaks detect on project_path (no-git mode) and return normalised findings.
 
-    Silently returns an empty list if gitleaks is not installed.
+    Writes the report to a temp file to avoid stdout/stderr interleaving issues.
+    Returns an info finding (not a crash) if gitleaks is not installed.
     """
-    findings: list[dict] = []
+    if not await _is_installed():
+        return [{
+            "id": str(uuid.uuid4()),
+            "scanner": "gitleaks",
+            "severity": "info",
+            "title": "Gitleaks not installed — secret scan skipped",
+            "description": "Install gitleaks to enable scanning for exposed credentials and secrets.",
+            "file": None,
+            "line": None,
+            "remediation": "macOS: `brew install gitleaks`  |  see https://github.com/gitleaks/gitleaks#installing",
+            "references": ["https://github.com/gitleaks/gitleaks"],
+        }]
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+        report_path = tmp.name
 
     proc = await asyncio.create_subprocess_exec(
         "gitleaks", "detect",
         "--source", project_path,
         "--report-format", "json",
-        "--report-path", "/dev/stdout",
+        "--report-path", report_path,
+        "--no-git",
         "--no-banner",
         "--exit-code", "0",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
     )
-    stdout, _ = await proc.communicate()
-
-    if proc.returncode not in (0, 1):
-        return findings  # not installed or hard error
+    await proc.communicate()
 
     try:
-        leaks = json.loads(stdout) or []
+        report_file = Path(report_path)
+        if not report_file.exists() or report_file.stat().st_size == 0:
+            return []
+        leaks = json.loads(report_file.read_text()) or []
     except Exception:
-        return findings
+        return []
+    finally:
+        Path(report_path).unlink(missing_ok=True)
 
-    for leak in leaks:
-        findings.append(_finding(leak, project_path))
-
-    return findings
+    return [_finding(leak) for leak in leaks]
