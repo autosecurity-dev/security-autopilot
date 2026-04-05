@@ -103,29 +103,20 @@ if [ "$IS_MAC" = "1" ]; then
   PLIST_DEST="$PLIST_DIR/dev.securityautopilot.daemon.plist"
   mkdir -p "$PLIST_DIR"
 
-  # Fetch template and fill in paths
-  PLIST_SRC="$(uv tool dir security-autopilot 2>/dev/null)/lib/python*/site-packages/daemon/launchd.plist.template"
-  # Fallback: write inline if template not found
-  cat > "$PLIST_DEST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key><string>dev.securityautopilot.daemon</string>
-    <key>ProgramArguments</key>
-    <array><string>$UVX_PATH</string><string>security-autopilot-daemon</string></array>
-    <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>$HOME/.security-autopilot/daemon.log</string>
-    <key>StandardErrorPath</key><string>$HOME/.security-autopilot/daemon.log</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$UV_BIN_DIR</string>
-        <key>HOME</key><string>$HOME</string>
-    </dict>
-</dict>
-</plist>
-PLIST
+  # Write plist using printf to avoid heredoc/variable-expansion issues in sh
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n' > "$PLIST_DEST"
+  printf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' >> "$PLIST_DEST"
+  printf '<plist version="1.0"><dict>\n' >> "$PLIST_DEST"
+  printf '  <key>Label</key><string>dev.securityautopilot.daemon</string>\n' >> "$PLIST_DEST"
+  printf '  <key>ProgramArguments</key><array><string>%s</string><string>security-autopilot-daemon</string></array>\n' "$UVX_PATH" >> "$PLIST_DEST"
+  printf '  <key>RunAtLoad</key><true/>\n' >> "$PLIST_DEST"
+  printf '  <key>KeepAlive</key><true/>\n' >> "$PLIST_DEST"
+  printf '  <key>StandardOutPath</key><string>%s/.security-autopilot/daemon.log</string>\n' "$HOME" >> "$PLIST_DEST"
+  printf '  <key>StandardErrorPath</key><string>%s/.security-autopilot/daemon.log</string>\n' "$HOME" >> "$PLIST_DEST"
+  printf '  <key>EnvironmentVariables</key><dict>\n' >> "$PLIST_DEST"
+  printf '    <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:%s</string>\n' "$UV_BIN_DIR" >> "$PLIST_DEST"
+  printf '    <key>HOME</key><string>%s</string>\n' "$HOME" >> "$PLIST_DEST"
+  printf '  </dict>\n</dict></plist>\n' >> "$PLIST_DEST"
 
   # Unload existing (idempotent), then load
   launchctl unload "$PLIST_DEST" 2>/dev/null || true
