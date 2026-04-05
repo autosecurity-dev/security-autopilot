@@ -2,10 +2,10 @@
 
 # 🛡️ Security Autopilot
 
-### The security scanner that works *while you code* — not after you ship.
+### Catches threats in your code. Fixes them automatically. Never asks you to do anything.
 
-[![Tests](https://img.shields.io/badge/tests-10%20passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![PyPI](https://img.shields.io/badge/pypi-0.1.2-green)](https://pypi.org/project/security-autopilot/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
 
@@ -29,168 +29,136 @@ After delivering the payload, it deleted itself and swapped its own `package.jso
 
 ---
 
-## What Security Autopilot Does
+## What It Does
 
-Security Autopilot is an **MCP server** that plugs directly into Claude Code and gives it real security scanning superpowers. You talk to Claude naturally — it runs the scans.
+Security Autopilot runs silently in the background on your machine from the moment you install it. You never have to open it, ask it anything, or remember it exists.
 
-It catches the class of attacks that traditional tools miss:
+### 1. Scans all your existing projects on first install
 
-| What it catches | How it catches it |
-|---|---|
-| 🔴 **Known-malicious packages** (axios@1.14.1, plain-crypto-js@4.2.1) | Blocklist checked before any install |
-| 🟠 **Maintainer account hijacks** | Detects publisher email changes between versions |
-| 🟠 **Postinstall script injection** | Flags any `preinstall`, `install`, `postinstall`, `prepare` lifecycle scripts |
-| 🟡 **Recently published versions** | 72-hour cooldown gate on new releases |
-| 🔵 **Floating version pins** | Flags `^` and `~` pins that allow silent upgrades |
-| 🔵 **Missing SLSA provenance** | Detects packages published without cryptographic build attestations |
-| 🟠 **Exposed secrets & credentials** | Gitleaks scans every file for hardcoded API keys, tokens, passwords |
-| 🟡 **CVEs in your dependencies** | Trivy scans against the full NVD vulnerability database |
-| 🟡 **Code-level security bugs** | Semgrep catches `eval(userInput)`, SQL injection, XSS, and 1000+ other patterns |
+The moment you install it, Security Autopilot walks through your development folders (`~/projects`, `~/code`, `~/Desktop/projects`, etc.), scans every project it finds, and sends you a single desktop notification with a summary. If anything critical is found, it tells you exactly what and where.
 
----
+### 2. Watches every project forever after
 
-## How It Works
+After the initial scan, it keeps watching. The moment you add or update a `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, or any lockfile — it scans automatically. No commands to run. No Claude Code required.
 
-```
-You type:  "is my supply chain safe?"
-              │
-              ▼
-        Claude Code calls scan_repo()
-              │
-    ┌─────────┴──────────┐
-    │   4 scanners run   │  ← all in parallel, ~10 seconds total
-    │   simultaneously   │
-    └─────────┬──────────┘
-              │
-    ┌─────────┴────────────────────────────────────┐
-    │  Supply Chain  │  Trivy  │  Gitleaks  │  Semgrep  │
-    └─────────┬────────────────────────────────────┘
-              │
-              ▼
-    Claude summarises findings in plain English
-    with severity, location, and exact fix steps
-```
+### 3. Auto-patches malicious packages
 
-Missing a scanner? **Security Autopilot installs it for you automatically** — no setup required.
+If it detects a known-malicious package (e.g. `axios@1.14.1`), it doesn't just warn you — it fixes it:
 
----
+- Finds the highest safe version within the same major (semver-compatible, no breaking changes)
+- Runs `npm install axios@1.14.0` automatically
+- Sends you a desktop notification: **"✅ Auto-patched: axios 1.14.1 → 1.14.0"**
 
-## Quick Start
+You never even see the bad version in your project.
 
-### 1. Install (one command)
+### 4. Fires a loud alert for exposed secrets
 
-```bash
-curl -fsSL https://get.securityautopilot.dev | sh
-```
+If it finds an API key, token, or password committed to your codebase — it sends an immediate desktop notification with step-by-step rotation instructions specific to that credential type:
 
-This installs `uv`, the MCP server, all scanner CLIs (trivy, gitleaks, semgrep), and automatically patches `~/.claude/claude.json` to register the plugin. Safe to run twice.
+> 🚨 **SECRET EXPOSED — Action Required**
+> AWS KEY exposed in .env. Go to AWS Console → IAM → Users → Security credentials → Delete key immediately.
 
-> **Telemetry:** On first run you'll be asked whether to share anonymous usage data (OS + Python version). You can opt out at any time by deleting `~/.security-autopilot/telemetry_consent`.
+Full instructions (all steps) are saved to `~/.security-autopilot/secret-alerts.log` so you can refer back at any time. Covers AWS, GitHub, Stripe, Slack, SendGrid, Twilio, JWT, and more.
 
-### 2. Restart Claude Code
+### 5. Plugs into Claude Code
 
-That's it — no manual config needed.
-
-### 3. Just talk to Claude
-
-```
-"scan this project for security issues"
-"any secrets exposed in this codebase?"
-"is my supply chain safe?"
-"check my dependencies for known vulnerabilities"
-"watch this project and alert me to new issues"
-```
-
----
-
-## What a Scan Looks Like
-
-```
-## Security Scan: `/your/project`
-Scanners: supply_chain, trivy, gitleaks, semgrep  |  Duration: 8.3s
-Found: 4 issues — 🔴 1 critical  🟠 2 high  🟡 0 medium  🔵 1 low
-
-### 🔴 [CRITICAL] Known-malicious package: axios@1.14.1
-Location: package.json
-Scanner: supply_chain
-
-axios@1.14.1 is on the known-bad blocklist.
-Reason: supply chain RAT March 2026 — postinstall dropper
-
-Remediation: Remove axios@1.14.1 immediately. Downgrade to axios@1.14.0.
-Rotate all secrets on affected machines — this version installs a
-remote access trojan.
-
-### 🟠 [HIGH] Exposed aws-secret-access-key secret in .env
-Location: .env:3
-Scanner: gitleaks
-
-Rotate this credential immediately — assume it is compromised.
-Add `.env` to .gitignore to prevent future commits.
-```
-
----
-
-## MCP Tools
-
-Claude gets access to 4 tools automatically:
+When Claude Code is open, Security Autopilot exposes four tools Claude can use directly:
 
 | Tool | What it does |
 |---|---|
-| `scan_repo(path)` | Full scan — all 4 scanners in parallel |
+| `scan_repo(path)` | Full scan — all 4 scanners in parallel, results in plain English |
 | `scan_file(filepath)` | Scan a single file |
 | `get_findings(severity)` | Retrieve cached findings from previous scans |
-| `watch_project(path)` | Start a background daemon that re-scans on file changes |
+| `watch_project(path)` | Start a background watcher on a specific project |
 
-The background watcher also sends a **desktop notification** the moment a new critical or high finding is detected — even if Claude Code isn't open.
+You can just say **"scan this project"** or **"show my security findings"** and Claude handles the rest.
+
+---
+
+## What It Catches
+
+| Threat | How |
+|---|---|
+| 🔴 **Known-malicious packages** | Blocklist of confirmed-bad versions updated as attacks happen |
+| 🟠 **Maintainer account hijacks** | Detects publisher email changes between versions |
+| 🟠 **Postinstall script injection** | Flags `preinstall`, `postinstall`, `prepare` lifecycle hooks |
+| 🟠 **Exposed secrets** | API keys, tokens, passwords committed to any file |
+| 🟡 **CVEs in dependencies** | Trivy scans against the full NVD vulnerability database |
+| 🟡 **Code-level bugs** | Semgrep: SQL injection, XSS, `eval(userInput)`, 1000+ patterns |
+| 🟡 **Recently published versions** | 72-hour cooldown gate on brand-new releases |
+| 🔵 **Floating version pins** | `^` and `~` pins that allow silent upgrades |
+| 🔵 **Missing SLSA provenance** | Packages published without cryptographic build attestations |
+
+---
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Omar-Dahleh/security-autopilot/main/install.sh | sh
+```
+
+This single command:
+1. Installs `uv` (Python package manager) if not present
+2. Installs `security-autopilot` from PyPI
+3. Installs `trivy`, `gitleaks`, and `semgrep` scanner CLIs
+4. Patches `~/.claude/claude.json` to register the Claude Code plugin
+5. Registers a background daemon that starts automatically at every login
+6. Immediately scans all your existing projects
+
+Safe to run twice — fully idempotent.
+
+> **Telemetry:** On first run you'll be asked whether to share anonymous usage data (OS + Python version only). Opt out anytime by deleting `~/.security-autopilot/telemetry_consent`.
+
+---
+
+## What Happens After Install
+
+```
+Install completes
+      │
+      ▼
+Daemon starts immediately
+      │
+      ├─▶ Scans all projects in ~/projects, ~/code, ~/Desktop/projects
+      │         └─▶ Desktop notification: "Scanned 8 projects — 2 critical issues found"
+      │
+      └─▶ Watches forever
+                │
+                ├─▶ You run npm install axios@1.14.1
+                │         └─▶ Detected → auto-patched to 1.14.0 → "✅ Fixed automatically"
+                │
+                ├─▶ You commit a file with an AWS key
+                │         └─▶ "🚨 SECRET EXPOSED — rotate immediately" + full steps
+                │
+                └─▶ New project appears in ~/projects
+                          └─▶ Auto-detected → scanned within 60 seconds
+```
 
 ---
 
 ## Scanners
 
-| Scanner | What it catches | Auto-installed? |
+| Scanner | What it catches | Requires |
 |---|---|---|
-| **Supply Chain** | Known-bad versions, account hijacks, lifecycle scripts, floating pins, SLSA gaps | ✅ Built-in |
-| **Trivy** | CVEs in npm, pip, Go, Rust, Java dependencies | ✅ Auto-installed |
-| **Gitleaks** | Hardcoded secrets, API keys, tokens, passwords | ✅ Auto-installed |
-| **Semgrep** | 1000+ SAST rules: injection, XSS, insecure patterns | ✅ Auto-installed |
+| **Supply Chain** | Known-bad versions, account hijacks, lifecycle scripts, floating pins | Built-in |
+| **Trivy** | CVEs in npm, pip, Go, Rust, Java dependencies | Auto-installed |
+| **Gitleaks** | Hardcoded secrets, API keys, tokens, passwords | Auto-installed |
+| **Semgrep** | 1000+ SAST rules: injection, XSS, insecure patterns | Auto-installed |
+
+Security Autopilot works with reduced coverage if a scanner is missing — it never crashes.
 
 ---
 
 ## For Contributors
 
 ```bash
-# Run tests
-uv run pytest tests/ -v
-
-# Start the MCP server manually
-python -m mcp_server.server
-
-# Add a new scanner
-# → see CLAUDE.md for the exact pattern to follow
+uv run pytest tests/ -v        # run all tests
+python -m mcp_server.server    # start MCP server manually
 ```
 
-### Adding a scanner takes ~50 lines
+See `CLAUDE.md` for the complete project context, coding rules, and how to add a new scanner.
 
-Every scanner follows the same pattern:
-
-```python
-# mcp_server/tools/my_scanner.py
-from .installer import ensure_installed
-
-async def scan(project_path: str) -> list[dict]:
-    if not await ensure_installed("my-tool"):
-        return [_not_installed_finding()]
-    # ... run subprocess, parse output, return findings
-```
-
-See `schemas/finding.json` for the unified finding schema all scanners must conform to.
-
----
-
-## Known-Bad Versions
-
-The supply chain scanner ships with a blocklist that is updated as attacks are discovered:
+### Known-Bad Versions
 
 ```python
 # mcp_server/tools/supply_chain.py → KNOWN_BAD
