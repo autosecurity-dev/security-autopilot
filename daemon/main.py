@@ -137,6 +137,70 @@ async def _initial_scan() -> None:
         _notify("Security Autopilot — Action Required", msg)
 
 
+# ── Live threat feed refresh ──────────────────────────────────────────────────
+async def _refresh_threat_feeds() -> None:
+    """Walk watched projects, collect packages, and refresh the threat feed cache."""
+    try:
+        from mcp_server.tools.threat_feeds import fetch_all_feeds
+        from mcp_server.tools.threat_cache import save_threats
+        import json
+
+        npm_packages: list[dict] = []
+        pip_packages: list[dict] = []
+
+        for project_dir in _find_existing_projects():
+            pkg_json = project_dir / "package.json"
+            if pkg_json.exists():
+                try:
+                    data = json.loads(pkg_json.read_text())
+                    deps = {
+                        **data.get("dependencies", {}),
+                        **data.get("devDependencies", {}),
+                    }
+                    for name, ver_spec in deps.items():
+                        version = ver_spec.lstrip("^~=>< ")
+                        if version:
+                            npm_packages.append({"name": name, "version": version})
+                except Exception:
+                    pass
+
+            req_txt = project_dir / "requirements.txt"
+            if req_txt.exists():
+                try:
+                    for line in req_txt.read_text().splitlines():
+                        line = line.strip()
+                        if not line or line.startswith("#") or "==" not in line:
+                            continue
+                        name, version = line.split("==", 1)
+                        pip_packages.append({"name": name.strip(), "version": version.strip()})
+                except Exception:
+                    pass
+
+        if not npm_packages and not pip_packages:
+            log.debug("Threat feed refresh: no packages found in watched projects")
+            return
+
+        threats = await fetch_all_feeds(npm_packages, pip_packages)
+        if threats:
+            await save_threats(threats)
+            log.info("Threat feeds updated — %d entries cached", len(threats))
+        else:
+            log.info("Threat feeds refreshed — no new threats found")
+
+    except Exception as exc:
+        log.warning("Threat feed refresh failed: %s", exc)
+
+
+async def _periodic_threat_refresh() -> None:
+    """Refresh threat feeds every 24 hours."""
+    while True:
+        await asyncio.sleep(24 * 60 * 60)
+        try:
+            await _refresh_threat_feeds()
+        except Exception as exc:
+            log.warning("Periodic threat refresh failed: %s", exc)
+
+
 # ── Auto-update ───────────────────────────────────────────────────────────────
 async def _check_for_update() -> None:
     """Check PyPI for a newer version and self-update if available."""
@@ -197,6 +261,7 @@ async def _run() -> None:
     try:
         await _initial_scan()
         await _check_for_update()  # Check for update on every startup
+        await _refresh_threat_feeds()  # Refresh live threat intel on startup
 
         # Start ongoing scheduler + watchers for already-found projects
         projects = _find_existing_projects()
@@ -208,13 +273,14 @@ async def _run() -> None:
 
         scheduler_task = asyncio.create_task(run_scheduler())
         update_task = asyncio.create_task(_periodic_update_check())
+        threat_task = asyncio.create_task(_periodic_threat_refresh())
 
         await stop_event.wait()
 
         # Cancel everything cleanly
-        for task in [scheduler_task, update_task, *watcher_tasks]:
+        for task in [scheduler_task, update_task, threat_task, *watcher_tasks]:
             task.cancel()
-        await asyncio.gather(scheduler_task, update_task, *watcher_tasks, return_exceptions=True)
+        await asyncio.gather(scheduler_task, update_task, threat_task, *watcher_tasks, return_exceptions=True)
 
     finally:
         _remove_pid()

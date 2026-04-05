@@ -26,6 +26,23 @@ KNOWN_BAD: list[dict[str, str]] = [
     {"name": "plain-crypto-js","version": "4.2.1",   "reason": "axios attack dropper — remote access trojan"},
 ]
 
+
+async def _get_known_bad() -> list[dict]:
+    """Return merged blocklist: hardcoded KNOWN_BAD + live-cached threats (24h TTL)."""
+    try:
+        from .threat_cache import load_cached_threats
+        cached = await load_cached_threats()
+    except Exception:
+        cached = []
+    seen: set[tuple[str, str]] = {(e["name"], e["version"]) for e in KNOWN_BAD}
+    merged = list(KNOWN_BAD)
+    for entry in cached:
+        key = (entry["name"], entry["version"])
+        if key not in seen:
+            seen.add(key)
+            merged.append(entry)
+    return merged
+
 LIFECYCLE_SCRIPTS = {"preinstall", "install", "postinstall", "prepare"}
 
 COOLDOWN_HOURS = 72  # flag versions published within this window
@@ -117,9 +134,11 @@ def _has_slsa_provenance(meta: dict, version: str) -> bool:
 # Per-file scanners
 # ---------------------------------------------------------------------------
 async def _scan_package_json(
-    path: Path, client: httpx.AsyncClient
+    path: Path, client: httpx.AsyncClient, known_bad: list[dict] | None = None
 ) -> list[dict]:
     """Scan a package.json for floating pins, known-bad deps, and lifecycle scripts."""
+    if known_bad is None:
+        known_bad = KNOWN_BAD
     findings: list[dict] = []
     try:
         data = json.loads(path.read_text())
@@ -171,7 +190,7 @@ async def _scan_package_json(
 
         # Known-bad version check (strip leading ^~/= for comparison)
         resolved = version_spec.lstrip("^~=>< ")
-        for bad in KNOWN_BAD:
+        for bad in known_bad:
             if bad["name"] == pkg and bad["version"] == resolved:
                 findings.append(_finding(
                     severity="critical",
@@ -195,9 +214,11 @@ async def _scan_package_json(
 
 
 async def _scan_package_lock(
-    path: Path, client: httpx.AsyncClient
+    path: Path, client: httpx.AsyncClient, known_bad: list[dict] | None = None
 ) -> list[dict]:
     """Scan package-lock.json for resolved known-bad versions and registry anomalies."""
+    if known_bad is None:
+        known_bad = KNOWN_BAD
     findings: list[dict] = []
     try:
         data = json.loads(path.read_text())
@@ -213,7 +234,7 @@ async def _scan_package_lock(
         resolved_version = pkg_data.get("version", "")
 
         # Known-bad check
-        for bad in KNOWN_BAD:
+        for bad in known_bad:
             if bad["name"] == pkg_name and bad["version"] == resolved_version:
                 findings.append(_finding(
                     severity="critical",
@@ -334,20 +355,70 @@ async def scan(project_path: str) -> list[dict]:
     root = Path(project_path)
     findings: list[dict] = []
 
+    # Collect packages for live feed lookup
+    npm_packages: list[dict] = []
+    pip_packages: list[dict] = []
+
+    pkg_json_path = root / "package.json"
+    if pkg_json_path.exists():
+        try:
+            pkg_data = json.loads(pkg_json_path.read_text())
+            deps = {
+                **pkg_data.get("dependencies", {}),
+                **pkg_data.get("devDependencies", {}),
+            }
+            for name, ver_spec in deps.items():
+                version = ver_spec.lstrip("^~=>< ")
+                if version:
+                    npm_packages.append({"name": name, "version": version})
+        except Exception:
+            pass
+
+    req_txt_path = root / "requirements.txt"
+    if req_txt_path.exists():
+        try:
+            for line in req_txt_path.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "==" not in line:
+                    continue
+                name, version = line.split("==", 1)
+                pip_packages.append({"name": name.strip(), "version": version.strip()})
+        except Exception:
+            pass
+
+    # Refresh live threat feeds (respects 24h TTL inside fetch_all_feeds)
+    if npm_packages or pip_packages:
+        try:
+            from .threat_feeds import fetch_all_feeds
+            from .threat_cache import load_cached_threats, save_threats, get_last_fetch_time
+            from datetime import timedelta
+
+            last_fetch = await get_last_fetch_time()
+            cache_stale = (
+                last_fetch is None
+                or (datetime.now(timezone.utc) - last_fetch) > timedelta(hours=24)
+            )
+            if cache_stale:
+                fresh = await fetch_all_feeds(npm_packages, pip_packages)
+                if fresh:
+                    await save_threats(fresh)
+        except Exception:
+            pass  # never block a scan
+
+    known_bad = await _get_known_bad()
+
     async with httpx.AsyncClient() as client:
         tasks = []
 
-        pkg_json = root / "package.json"
-        if pkg_json.exists():
-            tasks.append(_scan_package_json(pkg_json, client))
+        if pkg_json_path.exists():
+            tasks.append(_scan_package_json(pkg_json_path, client, known_bad))
 
         pkg_lock = root / "package-lock.json"
         if pkg_lock.exists():
-            tasks.append(_scan_package_lock(pkg_lock, client))
+            tasks.append(_scan_package_lock(pkg_lock, client, known_bad))
 
-        req_txt = root / "requirements.txt"
-        if req_txt.exists():
-            tasks.append(_scan_requirements_txt(req_txt))
+        if req_txt_path.exists():
+            tasks.append(_scan_requirements_txt(req_txt_path))
 
         results = await asyncio.gather(*tasks)
         for result in results:
