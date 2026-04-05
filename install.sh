@@ -1,7 +1,6 @@
 #!/bin/sh
 # install.sh
-# Update this URL after making repo public:
-# curl -fsSL https://raw.githubusercontent.com/Omar-Dahleh/security-autopilot/main/install.sh | sh
+# curl -fsSL https://raw.githubusercontent.com/security-autopilot/security-autopilot/main/install.sh | sh
 set -e
 
 YELLOW='\033[1;33m'

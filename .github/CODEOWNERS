@@ -1,0 +1,15 @@
+# CODEOWNERS
+# These owners are required reviewers for PRs touching sensitive files.
+# Format: <path pattern>   <GitHub username or team>
+
+# Everything requires review by default
+*                                   @security-autopilot/maintainers
+
+# High-trust files — must be reviewed by an org owner
+install.sh                          @Omar-Dahleh
+mcp_server/tools/supply_chain.py    @Omar-Dahleh
+mcp_server/tools/installer.py       @Omar-Dahleh
+mcp_server/telemetry.py             @Omar-Dahleh
+.github/workflows/                  @Omar-Dahleh
+.github/CODEOWNERS                  @Omar-Dahleh
+pyproject.toml                      @Omar-Dahleh

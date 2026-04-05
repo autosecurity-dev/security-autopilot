@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Python dependencies — opens PRs when packages in pyproject.toml have updates
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Never auto-merge — all dependency bumps require manual review
+    labels:
+      - "dependencies"
+
+  # GitHub Actions — pins and updates workflow Action versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"

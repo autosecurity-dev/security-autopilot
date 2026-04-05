@@ -11,7 +11,7 @@ Claude Code then calls `scan_repo`, `scan_file`, `get_findings`, or
 ## Commands
 
 ```bash
-uv run pytest tests/ -v                    # run all tests (16 total)
+uv run pytest tests/ -v                    # run all tests (23 total)
 python -m mcp_server.server --version      # print version and exit
 python -m mcp_server.server                # start MCP server (stdio)
 uv tool install security-autopilot         # install as CLI tool
@@ -108,6 +108,13 @@ Add new entries as `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
 
 ---
 
+## Context management
+
+- **Compact after major changes** — after completing a major architectural decision, a significant feature, or switching tasks, run `/compact` to compress the conversation context. This keeps token usage efficient and responses sharp.
+- **When to compact:** finishing a feature branch, completing a P0/P1 fix batch, switching from coding to debugging, or whenever context hits 60%.
+
+---
+
 ## Coding rules
 
 - **Async only** — all scanner functions are `async def`; no blocking I/O on
@@ -142,7 +149,7 @@ Add new entries as `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
 - `--version` flag on the CLI
 - `install.sh` one-liner (raw GitHub URL — update after repo goes public)
 - `docs/index.html` minimal landing page
-- 16 passing tests covering supply chain, integration, and critical paths
+- 23 passing tests covering supply chain, axios attack patterns, integration, and critical paths
 
 ### PostHog key not yet configured
 `mcp_server/telemetry.py` and `docs/index.html` contain `YOUR_POSTHOG_KEY` —
