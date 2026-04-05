@@ -22,6 +22,7 @@ from pathlib import Path
 from .scheduler import WATCHED_ROOTS, PROJECT_MARKERS, run_scheduler, _active
 from .watcher import start_watcher, _notify, _run_scan
 from mcp_server.aggregator import store
+from mcp_server.updater import get_latest_version, get_current_version, is_newer, self_update, restart_daemon
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = Path.home() / ".security-autopilot"
@@ -136,6 +137,47 @@ async def _initial_scan() -> None:
         _notify("Security Autopilot — Action Required", msg)
 
 
+# ── Auto-update ───────────────────────────────────────────────────────────────
+async def _check_for_update() -> None:
+    """Check PyPI for a newer version and self-update if available."""
+    current = get_current_version()
+    latest = get_latest_version()
+
+    if latest is None:
+        log.debug("Update check skipped — could not reach PyPI")
+        return
+
+    if not is_newer(latest, current):
+        log.info("Already on latest version (%s)", current)
+        return
+
+    log.info("Update available: %s → %s", current, latest)
+    success = await self_update(current, latest)
+
+    if success:
+        _notify(
+            "Security Autopilot updated",
+            f"v{current} → v{latest} — restarting now",
+        )
+        restart_daemon()  # os.execv — replaces this process cleanly
+    else:
+        log.warning("Auto-update failed — run install.sh to update manually")
+        _notify(
+            "Security Autopilot — Update available",
+            f"v{latest} available. Run install.sh to update (auto-update failed).",
+        )
+
+
+async def _periodic_update_check() -> None:
+    """Check for updates every 24 hours after the first startup check."""
+    while True:
+        await asyncio.sleep(24 * 60 * 60)
+        try:
+            await _check_for_update()
+        except Exception as exc:
+            log.warning("Periodic update check failed: %s", exc)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def _run() -> None:
     _write_pid()
@@ -154,6 +196,7 @@ async def _run() -> None:
 
     try:
         await _initial_scan()
+        await _check_for_update()  # Check for update on every startup
 
         # Start ongoing scheduler + watchers for already-found projects
         projects = _find_existing_projects()
@@ -164,13 +207,14 @@ async def _run() -> None:
         ]
 
         scheduler_task = asyncio.create_task(run_scheduler())
+        update_task = asyncio.create_task(_periodic_update_check())
 
         await stop_event.wait()
 
         # Cancel everything cleanly
-        for task in [scheduler_task, *watcher_tasks]:
+        for task in [scheduler_task, update_task, *watcher_tasks]:
             task.cancel()
-        await asyncio.gather(scheduler_task, *watcher_tasks, return_exceptions=True)
+        await asyncio.gather(scheduler_task, update_task, *watcher_tasks, return_exceptions=True)
 
     finally:
         _remove_pid()
