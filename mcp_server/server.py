@@ -14,7 +14,7 @@ from mcp.server import Server
 
 from .tools.scan_repo import scan_repo, scan_file
 from .aggregator import get_findings, store
-from .daemon.watcher import start_watcher
+from daemon.watcher import start_watcher
 
 app = Server("security-autopilot")
 
@@ -131,10 +131,13 @@ def _format_scan_result(result: dict) -> str:
     """Format scan results as readable markdown for Claude."""
     summary = result["summary"]
     findings = result["findings"]
-    path = result.get("path") or result.get("file", "unknown")
+    path = summary.get("scanned_path", "unknown")
 
+    scanners = ", ".join(summary.get("scanners_run", []))
+    duration = summary.get("scan_duration_seconds", 0)
     lines = [
         f"## Security Scan: `{path}`",
+        f"**Scanners:** {scanners}  |  **Duration:** {duration}s",
         f"**Found:** {len(findings)} issues — "
         f"🔴 {summary['critical']} critical  "
         f"🟠 {summary['high']} high  "
@@ -177,6 +180,12 @@ def _format_findings(findings: list[dict]) -> str:
 
 def main() -> None:
     """Entry point for `uvx security-autopilot`."""
+    import sys
+    print(
+        "Security Autopilot MCP server running.\n"
+        "Registered tools: scan_repo, scan_file, get_findings, watch_project",
+        file=sys.stderr,
+    )
     asyncio.run(mcp.server.stdio.run(app))
 
 
