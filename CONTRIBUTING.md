@@ -11,7 +11,7 @@ Thanks for helping keep the community safer. There are three ways to contribute:
 ## Quick start
 
 ```bash
-git clone git@github.com:Omar-Dahleh/security-autopilot.git
+git clone git@github.com:autosecurity-dev/security-autopilot.git
 cd security-autopilot
 uv sync --dev
 uv run pytest tests/ -v

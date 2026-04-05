@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/Omar-Dahleh/security-autopilot/security/advisories/new
+    url: https://github.com/autosecurity-dev/security-autopilot/security/advisories/new
     about: Do not open a public issue for vulnerabilities. Use GitHub's private security advisory instead.

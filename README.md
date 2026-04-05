@@ -94,7 +94,7 @@ You can just say **"scan this project"** or **"show my security findings"** and 
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Omar-Dahleh/security-autopilot/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/autosecurity-dev/security-autopilot/main/install.sh | sh
 ```
 
 This single command:

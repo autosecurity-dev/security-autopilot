@@ -1,6 +1,6 @@
 #!/bin/sh
 # install.sh
-# curl -fsSL https://raw.githubusercontent.com/security-autopilot/security-autopilot/main/install.sh | sh
+# curl -fsSL https://raw.githubusercontent.com/autosecurity-dev/security-autopilot/main/install.sh | sh
 set -e
 
 YELLOW='\033[1;33m'

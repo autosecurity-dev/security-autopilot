@@ -3,7 +3,7 @@
 # Format: <path pattern>   <GitHub username or team>
 
 # Everything requires review by default
-*                                   @security-autopilot/maintainers
+*                                   @autosecurity-dev/maintainers
 
 # High-trust files — must be reviewed by an org owner
 install.sh                          @Omar-Dahleh

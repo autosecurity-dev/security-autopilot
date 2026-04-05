@@ -5,7 +5,7 @@
 **Do not open a public GitHub issue for security vulnerabilities.**
 
 Use GitHub's private security advisory instead:
-**[Report a vulnerability](https://github.com/Omar-Dahleh/security-autopilot/security/advisories/new)**
+**[Report a vulnerability](https://github.com/autosecurity-dev/security-autopilot/security/advisories/new)**
 
 This keeps the report private until a fix is released.
 
