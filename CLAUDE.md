@@ -1,45 +1,150 @@
 # Security Autopilot
 
-MCP server that gives Claude Code native security scanning via Trivy, Gitleaks, Semgrep, and a custom supply chain checker.
+MCP server that gives Claude Code native security scanning by wrapping four
+tools — Trivy, Gitleaks, Semgrep, and a custom supply chain checker — and
+exposing them as MCP tools. Users install via a one-liner (`install.sh`);
+Claude Code then calls `scan_repo`, `scan_file`, `get_findings`, or
+`watch_project` directly from the chat prompt.
+
+---
 
 ## Commands
 
 ```bash
 uv run pytest tests/ -v          # run all tests
-python -m mcp_server.server      # start MCP server
+python -m mcp_server.server      # start MCP server (stdio)
+uv tool install security-autopilot  # install as CLI tool
 ```
 
-## Project layout
+---
+
+## File map (every file, one line)
 
 ```
-mcp_server/tools/
-  supply_chain.py  ← core: known-bad versions, lifecycle scripts, maintainer hijacks
-  trivy.py         ← CVE scanning (requires trivy CLI)
-  gitleaks.py      ← secret detection (requires gitleaks CLI)
-  semgrep.py       ← SAST (requires semgrep CLI)
-  scan_repo.py     ← orchestrates all 4 in parallel via asyncio.gather
-mcp_server/aggregator.py         ← SQLite cache at ~/.security-autopilot/findings.db
-mcp_server/server.py             ← MCP tool definitions
-daemon/watcher.py                ← watchdog daemon, desktop notifications
-daemon/scheduler.py              ← auto-detects new projects in ~/projects etc.
+install.sh                          one-liner installer hosted at get.securityautopilot.dev
+docs/index.html                     minimal dark landing page (pure HTML, no framework)
+schemas/finding.json                JSON Schema for a single finding — all scanners must conform
+pyproject.toml                      package config; entry point: mcp_server.server:main
+
+mcp_server/server.py                MCP tool definitions + dispatch; calls telemetry on startup
+mcp_server/aggregator.py            SQLite cache at ~/.security-autopilot/findings.db
+mcp_server/telemetry.py             opt-in anonymous usage pings via PostHog HTTP API (stdlib only)
+mcp_server/__main__.py              allows `python -m mcp_server.server`
+
+mcp_server/tools/scan_repo.py       orchestrates all 4 scanners in parallel via asyncio.gather
+mcp_server/tools/supply_chain.py    core scanner: KNOWN_BAD list, lifecycle scripts, maintainer hijacks
+mcp_server/tools/trivy.py           CVE scanner — shells out to trivy CLI
+mcp_server/tools/gitleaks.py        secret detection — shells out to gitleaks CLI
+mcp_server/tools/semgrep.py         SAST — shells out to semgrep CLI
+mcp_server/tools/installer.py       auto-installs trivy/gitleaks/semgrep if missing (macOS + Linux)
+
+daemon/watcher.py                   watchdog daemon; re-scans on manifest file changes; sends desktop notifications
+daemon/scheduler.py                 auto-detects new projects in ~/projects, ~/code, ~/Desktop/projects
+
+tests/test_supply_chain.py          unit tests for supply chain scanner (axios attack fixture)
+tests/test_integration.py           integration tests for scan_repo end-to-end
+tests/fixtures/axios_attack/        package.json pinned to axios@1.14.1 (known-bad)
 ```
+
+---
+
+## Unified finding schema
+
+Every scanner must return a `list[dict]` where each dict conforms to
+`schemas/finding.json`. Deviations will fail aggregator validation.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SecurityFinding",
+  "type": "object",
+  "required": ["id", "scanner", "severity", "title", "description", "remediation"],
+  "properties": {
+    "id":          { "type": "string", "format": "uuid" },
+    "scanner":     { "type": "string", "enum": ["supply_chain", "trivy", "gitleaks", "semgrep"] },
+    "severity":    { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+    "title":       { "type": "string" },
+    "description": { "type": "string" },
+    "file":        { "type": ["string", "null"] },
+    "line":        { "type": ["integer", "null"] },
+    "remediation": { "type": "string" },
+    "references":  { "type": "array", "items": { "type": "string" } }
+  }
+}
+```
+
+**Severity values:** `critical | high | medium | low | info`
+**Rule:** if the CLI tool is not installed, return one `info` finding —
+never raise an exception.
+
+---
+
+## Known-bad versions list
+
+`mcp_server/tools/supply_chain.py` → `KNOWN_BAD` list at the top of the file.
+
+```python
+KNOWN_BAD: list[dict[str, str]] = [
+    {"name": "axios",           "version": "1.14.1", "reason": "supply chain RAT March 2026 — postinstall dropper"},
+    {"name": "axios",           "version": "0.30.4", "reason": "supply chain RAT March 2026 — postinstall dropper"},
+    {"name": "plain-crypto-js", "version": "4.2.1",  "reason": "axios attack dropper — remote access trojan"},
+]
+```
+
+Add new entries as `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
+
+---
 
 ## Adding a new scanner
 
 1. Create `mcp_server/tools/my_scanner.py`
 2. Implement `async def scan(project_path: str) -> list[dict]`
-3. Each finding must match `schemas/finding.json`:
-   `{id, scanner, severity, title, description, file, line, remediation, references}`
-4. Severity values: `critical | high | medium | low | info`
-5. Return an `info` finding (not a crash) if the CLI tool is not installed
-6. Add to `_SCANNER_MAP` in `scan_repo.py`
+3. Each finding must conform to the schema above
+4. Return an `info` finding (not a crash) if the CLI tool is not installed
+5. Add to `_SCANNER_MAP` in `scan_repo.py`
+6. Register the new scanner name in `schemas/finding.json` → `scanner.enum`
 7. Add tests in `tests/`
 
-## Unified finding schema
+---
 
-See `schemas/finding.json`. Required fields: `id, scanner, severity, title, description, remediation`.
+## Coding rules
 
-## Known-bad versions list
+- **Async only** — all scanner functions are `async def`; no blocking I/O on
+  the event loop. Shell out with `asyncio.create_subprocess_exec`, not
+  `subprocess.run`.
+- **Graceful degradation** — a missing CLI tool, network timeout, or parse
+  error must never crash the server. Return an `info` finding with a clear
+  message; log the exception to stderr.
+- **Idempotency** — `install.sh` and the claude.json patch are safe to run
+  multiple times without side effects.
+- **No new dependencies for telemetry** — `telemetry.py` uses stdlib `urllib`
+  only. Do not add the PostHog SDK.
+- **Test coverage** — every scanner needs at minimum: (a) a happy-path test
+  with a real fixture, (b) a test for the "tool not installed" info-finding
+  path. Integration tests live in `test_integration.py`.
 
-`mcp_server/tools/supply_chain.py` → `KNOWN_BAD` list at the top of the file.
-Add entries as: `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
+---
+
+## Current status
+
+### Built
+- MCP server with four tools: `scan_repo`, `scan_file`, `get_findings`, `watch_project`
+- Supply chain scanner with KNOWN_BAD blocklist, lifecycle script detection, maintainer hijack heuristics
+- Trivy, Gitleaks, Semgrep wrappers that shell out to CLI tools
+- Auto-installer (`installer.py`) for missing CLI tools — macOS (brew) + Linux (curl)
+- SQLite findings cache via `aggregator.py`
+- Background file watcher (`daemon/watcher.py`) + project auto-detector (`daemon/scheduler.py`)
+- Opt-in anonymous telemetry (`telemetry.py`) — PostHog, no SDK, prompted on first run
+- `install.sh` one-liner for end users
+- `docs/index.html` minimal landing page
+
+### PostHog key not yet configured
+`mcp_server/telemetry.py` line 17 and `docs/index.html` line 9 both contain
+`YOUR_POSTHOG_KEY` — replace with the real `phc_...` key once the account is created.
+
+### What's next (known gaps)
+- No CLI beyond the MCP server — `security-autopilot daemon start` does not exist
+- `daemon/scheduler.py` has no entry point wired to `server.py`
+- No PyPI publish yet (`uv tool install security-autopilot` will fail until published)
+- GitHub Actions CI (`ci.yml`) — verify it passes on push
+- `install.sh` tested locally but not yet on a clean Ubuntu 22 VM
