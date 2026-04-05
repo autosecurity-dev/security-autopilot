@@ -16,6 +16,8 @@ from watchdog.observers import Observer
 
 from mcp_server.tools.scan_repo import scan_repo
 from mcp_server.aggregator import store, get_findings
+from mcp_server.tools.autopatch import auto_patch
+from mcp_server.tools.secret_remediation import get_remediation, log_secret_alert
 
 # Files that trigger a re-scan when modified
 TRIGGER_FILES = {
@@ -88,11 +90,42 @@ async def _run_scan(project_path: str) -> None:
     ]
 
     if new_high:
-        titles = ", ".join(f["title"] for f in new_high[:3])
-        _notify(
-            "Security Autopilot — New Findings",
-            f"{len(new_high)} new {'critical' if any(f['severity']=='critical' for f in new_high) else 'high'} issue(s): {titles}",
-        )
+        patch_results = []
+        secret_findings = []
+        unhandled = []
+
+        for f in new_high:
+            if f["scanner"] == "supply_chain" and f["severity"] == "critical":
+                try:
+                    result = await auto_patch(project_path, f)
+                    if result and result["success"]:
+                        patch_results.append(result)
+                    else:
+                        unhandled.append(f)
+                except Exception:
+                    unhandled.append(f)
+            elif f["scanner"] == "gitleaks":
+                secret_findings.append(f)
+            else:
+                unhandled.append(f)
+
+        # Auto-patch notification
+        if patch_results:
+            msg = ", ".join(f"{r['package']} {r['from']}→{r['to']}" for r in patch_results)
+            _notify("Security Autopilot — ✅ Auto-patched", f"Fixed: {msg}")
+
+        # Secret notifications (one per secret — loud)
+        for f in secret_findings:
+            log_secret_alert(project_path, f)
+            _notify("🚨 SECRET EXPOSED — Action Required", get_remediation(f))
+
+        # Remaining unhandled findings
+        if unhandled:
+            titles = ", ".join(f["title"] for f in unhandled[:3])
+            _notify(
+                "Security Autopilot — New Findings",
+                f"{len(unhandled)} issue(s): {titles}",
+            )
 
 
 async def start_watcher(project_path: str) -> None:
