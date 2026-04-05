@@ -14,6 +14,7 @@ from mcp.server import Server
 
 from .tools.scan_repo import scan_repo, scan_file
 from .aggregator import get_findings, store
+from .telemetry import check_and_ping
 from daemon.watcher import start_watcher
 
 app = Server("security-autopilot")
@@ -181,6 +182,7 @@ def _format_findings(findings: list[dict]) -> str:
 def main() -> None:
     """Entry point for `uvx security-autopilot`."""
     import sys
+    check_and_ping()
     print(
         "Security Autopilot MCP server running.\n"
         "Registered tools: scan_repo, scan_file, get_findings, watch_project",
