@@ -108,7 +108,7 @@ if [ "$IS_MAC" = "1" ]; then
   printf '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' >> "$PLIST_DEST"
   printf '<plist version="1.0"><dict>\n' >> "$PLIST_DEST"
   printf '  <key>Label</key><string>dev.securityautopilot.daemon</string>\n' >> "$PLIST_DEST"
-  printf '  <key>ProgramArguments</key><array><string>%s</string><string>security-autopilot-daemon</string></array>\n' "$UVX_PATH" >> "$PLIST_DEST"
+  printf '  <key>ProgramArguments</key><array><string>%s</string><string>--from</string><string>security-autopilot</string><string>security-autopilot-daemon</string></array>\n' "$UVX_PATH" >> "$PLIST_DEST"
   printf '  <key>RunAtLoad</key><true/>\n' >> "$PLIST_DEST"
   printf '  <key>KeepAlive</key><true/>\n' >> "$PLIST_DEST"
   printf '  <key>StandardOutPath</key><string>%s/.security-autopilot/daemon.log</string>\n' "$HOME" >> "$PLIST_DEST"
@@ -134,7 +134,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=$UVX_PATH security-autopilot-daemon
+ExecStart=$UVX_PATH --from security-autopilot security-autopilot-daemon
 Restart=on-failure
 RestartSec=10
 Environment=HOME=$HOME
