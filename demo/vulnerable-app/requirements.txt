@@ -1,0 +1,7 @@
+# ⚠️  DEMO FILE — pinned to old versions with known CVEs for trivy testing
+django==2.2.0
+pillow==8.2.0
+requests==2.18.0
+flask==0.12.0
+pyyaml==3.13
+cryptography==2.6.0
