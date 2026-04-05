@@ -92,13 +92,83 @@ config["mcpServers"]["security-autopilot"] = {
 config_path.write_text(json.dumps(config, indent=2))
 PYEOF
 
-# ── 6. Done ───────────────────────────────────────────────────────────────────
+# ── 6. Register and start background daemon ───────────────────────────────────
+info "Registering background daemon..."
+
+UVX_PATH="$(command -v uvx 2>/dev/null || echo "$HOME/.local/bin/uvx")"
+UV_BIN_DIR="$(dirname "$UVX_PATH")"
+
+if [ "$IS_MAC" = "1" ]; then
+  PLIST_DIR="$HOME/Library/LaunchAgents"
+  PLIST_DEST="$PLIST_DIR/dev.securityautopilot.daemon.plist"
+  mkdir -p "$PLIST_DIR"
+
+  # Fetch template and fill in paths
+  PLIST_SRC="$(uv tool dir security-autopilot 2>/dev/null)/lib/python*/site-packages/daemon/launchd.plist.template"
+  # Fallback: write inline if template not found
+  cat > "$PLIST_DEST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>dev.securityautopilot.daemon</string>
+    <key>ProgramArguments</key>
+    <array><string>$UVX_PATH</string><string>security-autopilot-daemon</string></array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>$HOME/.security-autopilot/daemon.log</string>
+    <key>StandardErrorPath</key><string>$HOME/.security-autopilot/daemon.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key><string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$UV_BIN_DIR</string>
+        <key>HOME</key><string>$HOME</string>
+    </dict>
+</dict>
+</plist>
+PLIST
+
+  # Unload existing (idempotent), then load
+  launchctl unload "$PLIST_DEST" 2>/dev/null || true
+  launchctl load "$PLIST_DEST"
+  info "Daemon registered (starts at login)"
+
+else
+  SERVICE_DIR="$HOME/.config/systemd/user"
+  mkdir -p "$SERVICE_DIR"
+
+  cat > "$SERVICE_DIR/security-autopilot.service" <<SYSTEMD
+[Unit]
+Description=Security Autopilot — background security scanner
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$UVX_PATH security-autopilot-daemon
+Restart=on-failure
+RestartSec=10
+Environment=HOME=$HOME
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:$UV_BIN_DIR
+StandardOutput=append:$HOME/.security-autopilot/daemon.log
+StandardError=append:$HOME/.security-autopilot/daemon.log
+
+[Install]
+WantedBy=default.target
+SYSTEMD
+
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user enable --now security-autopilot 2>/dev/null || \
+    warn "Could not start systemd service — run: systemctl --user start security-autopilot"
+  info "Daemon registered (starts at login)"
+fi
+
+# ── 7. Done ───────────────────────────────────────────────────────────────────
 echo ""
-printf "${GREEN}Security Autopilot is installed.${RESET}\n"
+printf "${GREEN}Security Autopilot is installed and running.${RESET}\n"
 echo ""
-echo "  Open Claude Code in any project and say:"
+echo "  Scanning your existing projects in the background."
+echo "  You'll get a desktop notification when the first scan is complete."
+echo ""
+echo "  You can also open Claude Code and say:"
 echo "  → 'scan this project'"
-echo "  → 'watch this project for threats'"
-echo ""
-echo "  Claude Code will start the scanner automatically."
+echo "  → 'show my security findings'"
 echo ""

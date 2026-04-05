@@ -1,0 +1,16 @@
+[Unit]
+Description=Security Autopilot — background security scanner
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=__UVX_PATH__ security-autopilot-daemon
+Restart=on-failure
+RestartSec=10
+Environment=HOME=__HOME__
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:__UV_BIN_DIR__
+StandardOutput=append:__HOME__/.security-autopilot/daemon.log
+StandardError=append:__HOME__/.security-autopilot/daemon.log
+
+[Install]
+WantedBy=default.target

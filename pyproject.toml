@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 security-autopilot = "mcp_server.server:main"
+security-autopilot-daemon = "daemon.main:main"
 
 [project.optional-dependencies]
 dev = [
