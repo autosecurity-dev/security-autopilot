@@ -1,0 +1,63 @@
+name: Propose a new scanner
+description: Suggest wrapping a new CLI security tool as a scanner
+labels: ["new-scanner", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security Autopilot wraps CLI tools (Trivy, Gitleaks, Semgrep) and exposes them as MCP tools.
+        If there's a well-maintained tool you'd like added, propose it here.
+
+  - type: input
+    id: tool_name
+    attributes:
+      label: Tool name
+      placeholder: "e.g. osv-scanner"
+    validations:
+      required: true
+
+  - type: input
+    id: homepage
+    attributes:
+      label: Homepage / repo
+      placeholder: "https://github.com/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_it_detects
+    attributes:
+      label: What does it detect?
+      description: What class of vulnerabilities or issues does this tool find?
+      placeholder: "Detects known vulnerabilities in open source dependencies using OSV..."
+    validations:
+      required: true
+
+  - type: input
+    id: install_command
+    attributes:
+      label: Install command (macOS)
+      placeholder: "brew install osv-scanner"
+    validations:
+      required: true
+
+  - type: input
+    id: install_command_linux
+    attributes:
+      label: Install command (Linux)
+      placeholder: "curl -fsSL ... | sh"
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why should this be included?
+      description: What gap does it fill that Trivy, Gitleaks, and Semgrep don't cover?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: willing_to_pr
+    attributes:
+      label: Are you willing to implement it?
+      options:
+        - label: Yes, I can open a PR for this

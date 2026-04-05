@@ -1,0 +1,68 @@
+name: Report a malicious package
+description: Found a package that should be added to the KNOWN_BAD blocklist
+labels: ["malicious-package", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping protect the community. Please include a source — we don't add unsourced entries.
+
+  - type: input
+    id: package_name
+    attributes:
+      label: Package name
+      placeholder: "e.g. axios"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Affected version(s)
+      description: Exact version(s) that are malicious. Use one line per version if multiple.
+      placeholder: "e.g. 1.14.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ecosystem
+    attributes:
+      label: Ecosystem
+      options:
+        - npm
+        - pip (PyPI)
+        - Go
+        - Rust (crates.io)
+        - Maven
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: What does the malicious version do?
+      description: Brief description of the attack — postinstall dropper, typosquat, data exfiltration, etc.
+      placeholder: "Postinstall script downloads and executes a remote access trojan..."
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Source / advisory URL
+      description: Link to the advisory, blog post, CVE, or news article confirming this is malicious.
+      placeholder: "https://github.com/advisories/..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical (RCE, data exfiltration, RAT)
+        - High (credential theft, backdoor)
+        - Medium (data leak, suspicious behavior)
+    validations:
+      required: true
