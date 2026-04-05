@@ -45,7 +45,7 @@ async def load_cached_threats() -> list[dict]:
                 (cutoff,),
             ) as cursor:
                 rows = await cursor.fetchall()
-        return [{"name": r["name"], "version": r["version"], "reason": r["reason"]} for r in rows]
+        return [{"name": r["name"], "version": r["version"], "reason": r["reason"], "source": r["source"]} for r in rows]
     except Exception as exc:
         log.debug("Could not load cached threats: %s", exc)
         return []

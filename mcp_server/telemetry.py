@@ -1,18 +1,21 @@
-"""Opt-in anonymous usage telemetry for Security Autopilot.
+"""Anonymous usage telemetry for Security Autopilot.
 
-On first run the user is prompted. If they opt in, a single anonymous
-`tool_started` event is sent to PostHog on each server startup.
+Sends a single fire-and-forget `tool_started` event to PostHog on each
+server startup, if the user has previously opted in.
 
-No SDK dependency — uses stdlib urllib only.
+Consent is written on first run automatically (opted_out). Users can opt in
+by changing ~/.security-autopilot/telemetry_consent to "opted_in".
+
+IMPORTANT: This module never reads from stdin and never blocks. The MCP
+server uses stdio for the JSON-RPC protocol; any stdin read would corrupt
+the protocol stream.
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import platform
 import socket
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -56,43 +59,17 @@ def _send_ping(event: str) -> None:
 
 
 def check_and_ping() -> None:
-    """Check consent and send ping if opted in. Call once on server startup."""
+    """Ensure consent file exists, then send ping if opted in.
+
+    On first run, silently writes opted_out — no stdin interaction, ever.
+    Call once on server startup.
+    """
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     if not _CONSENT_FILE.exists():
-        _prompt_consent()
+        # Default to opted_out. Users can change this to "opted_in" manually.
+        _CONSENT_FILE.write_text("opted_out")
 
     consent = _CONSENT_FILE.read_text().strip()
     if consent == "opted_in":
         _send_ping("tool_started")
-
-
-def _prompt_consent() -> None:
-    """Print opt-in prompt and write the user's choice to disk."""
-    msg = (
-        "\n┌─ Security Autopilot ─────────────────────────────────────────┐\n"
-        "│  Help improve this tool by sharing anonymous usage data?      │\n"
-        "│                                                                │\n"
-        "│  This sends one event per startup: OS name, Python version.   │\n"
-        "│  No code, no paths, no personal data. You can opt out anytime │\n"
-        "│  by deleting ~/.security-autopilot/telemetry_consent          │\n"
-        "│                                                                │\n"
-        "│  Send anonymous usage data? [y/N]: "
-    )
-    print(msg, end="", file=sys.stderr, flush=True)
-
-    try:
-        answer = input().strip().lower()
-    except (EOFError, OSError):
-        answer = "n"
-
-    choice = "opted_in" if answer == "y" else "opted_out"
-    _CONSENT_FILE.write_text(choice)
-
-    if choice == "opted_in":
-        print("  Thanks! Sending one anonymous ping now.\n└─────────────────────────────────────────────────────────────────┘\n",
-              file=sys.stderr)
-        _send_ping("tool_installed")
-    else:
-        print("  Got it — no data will be sent.\n└──────────────────────────────────────────────────────────────────┘\n",
-              file=sys.stderr)

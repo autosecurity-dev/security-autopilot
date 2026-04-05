@@ -216,7 +216,11 @@ async def _scan_package_json(
 async def _scan_package_lock(
     path: Path, client: httpx.AsyncClient, known_bad: list[dict] | None = None
 ) -> list[dict]:
-    """Scan package-lock.json for resolved known-bad versions and registry anomalies."""
+    """Scan package-lock.json for resolved known-bad versions and registry anomalies.
+
+    npm registry calls are made concurrently (max 10 in-flight at once)
+    so large lockfiles don't cause multi-minute stalls.
+    """
     if known_bad is None:
         known_bad = KNOWN_BAD
     findings: list[dict] = []
@@ -227,13 +231,16 @@ async def _scan_package_lock(
 
     packages = data.get("packages", {}) or {}
 
+    # Collect packages that need registry checks and run known-bad checks inline
+    registry_targets: list[tuple[str, str]] = []  # (pkg_name, resolved_version)
+
     for pkg_path, pkg_data in packages.items():
         if not pkg_path.startswith("node_modules/"):
             continue
         pkg_name = pkg_path.removeprefix("node_modules/")
         resolved_version = pkg_data.get("version", "")
 
-        # Known-bad check
+        # Known-bad check (no network needed)
         for bad in known_bad:
             if bad["name"] == pkg_name and bad["version"] == resolved_version:
                 findings.append(_finding(
@@ -249,60 +256,78 @@ async def _scan_package_lock(
                     references=["https://socket.dev"],
                 ))
 
-        # Registry anomaly checks via npm API
+        # Queue registry anomaly checks for non-scoped packages with a version
         if resolved_version and pkg_name and not pkg_name.startswith("@"):
+            registry_targets.append((pkg_name, resolved_version))
+
+    # Concurrent registry lookups — max 10 in-flight
+    sem = asyncio.Semaphore(10)
+
+    async def _check_registry(pkg_name: str, resolved_version: str) -> list[dict]:
+        async with sem:
             meta = await _fetch_npm_metadata(client, pkg_name)
-            if meta:
-                # Maintainer email change
-                if _maintainer_email_changed(meta, resolved_version):
-                    findings.append(_finding(
-                        severity="high",
-                        title=f"Maintainer email changed at {pkg_name}@{resolved_version}",
-                        description=(
-                            f"The npm publisher email for `{pkg_name}` changed between "
-                            f"the previous version and `{resolved_version}`. This is a "
-                            "strong signal of account hijack (as seen in the March 2026 axios attack)."
-                        ),
-                        file=str(path),
-                        remediation="Pin to the last version published by the original maintainer "
-                                    "and open an issue with the package maintainers to verify.",
-                        references=["https://blog.npmjs.org/post/security"],
-                    ))
+        if not meta:
+            return []
+        pkg_findings: list[dict] = []
 
-                # Cooldown gate — recently published
-                pub_time = _published_at(meta, resolved_version)
-                if pub_time:
-                    age = datetime.now(timezone.utc) - pub_time
-                    if age < timedelta(hours=COOLDOWN_HOURS):
-                        hours_old = int(age.total_seconds() / 3600)
-                        findings.append(_finding(
-                            severity="medium",
-                            title=f"Recently published version: {pkg_name}@{resolved_version} ({hours_old}h ago)",
-                            description=(
-                                f"`{pkg_name}@{resolved_version}` was published only {hours_old} hours ago, "
-                                f"within the {COOLDOWN_HOURS}h cooldown window. New versions have not yet "
-                                "been audited by the community and carry elevated supply chain risk."
-                            ),
-                            file=str(path),
-                            remediation=f"Wait {COOLDOWN_HOURS - hours_old}h before adopting this version, "
-                                        "or pin to the previous stable release.",
-                        ))
+        if _maintainer_email_changed(meta, resolved_version):
+            pkg_findings.append(_finding(
+                severity="high",
+                title=f"Maintainer email changed at {pkg_name}@{resolved_version}",
+                description=(
+                    f"The npm publisher email for `{pkg_name}` changed between "
+                    f"the previous version and `{resolved_version}`. This is a "
+                    "strong signal of account hijack (as seen in the March 2026 axios attack)."
+                ),
+                file=str(path),
+                remediation="Pin to the last version published by the original maintainer "
+                            "and open an issue with the package maintainers to verify.",
+                references=["https://blog.npmjs.org/post/security"],
+            ))
 
-                # SLSA provenance
-                if not _has_slsa_provenance(meta, resolved_version):
-                    findings.append(_finding(
-                        severity="info",
-                        title=f"No SLSA provenance: {pkg_name}@{resolved_version}",
-                        description=(
-                            f"`{pkg_name}@{resolved_version}` was not published with SLSA provenance "
-                            "metadata, meaning there is no cryptographic link between the npm artifact "
-                            "and a verified CI/CD build."
-                        ),
-                        file=str(path),
-                        remediation="Prefer packages published via npm trusted publishing (OIDC). "
-                                    "Check https://provenance.npmjs.com for provenance attestations.",
-                        references=["https://docs.npmjs.com/generating-provenance-statements"],
-                    ))
+        pub_time = _published_at(meta, resolved_version)
+        if pub_time:
+            age = datetime.now(timezone.utc) - pub_time
+            if age < timedelta(hours=COOLDOWN_HOURS):
+                hours_old = int(age.total_seconds() / 3600)
+                pkg_findings.append(_finding(
+                    severity="medium",
+                    title=f"Recently published version: {pkg_name}@{resolved_version} ({hours_old}h ago)",
+                    description=(
+                        f"`{pkg_name}@{resolved_version}` was published only {hours_old} hours ago, "
+                        f"within the {COOLDOWN_HOURS}h cooldown window. New versions have not yet "
+                        "been audited by the community and carry elevated supply chain risk."
+                    ),
+                    file=str(path),
+                    remediation=f"Wait {COOLDOWN_HOURS - hours_old}h before adopting this version, "
+                                "or pin to the previous stable release.",
+                ))
+
+        if not _has_slsa_provenance(meta, resolved_version):
+            pkg_findings.append(_finding(
+                severity="info",
+                title=f"No SLSA provenance: {pkg_name}@{resolved_version}",
+                description=(
+                    f"`{pkg_name}@{resolved_version}` was not published with SLSA provenance "
+                    "metadata, meaning there is no cryptographic link between the npm artifact "
+                    "and a verified CI/CD build."
+                ),
+                file=str(path),
+                remediation="Prefer packages published via npm trusted publishing (OIDC). "
+                            "Check https://provenance.npmjs.com for provenance attestations.",
+                references=["https://docs.npmjs.com/generating-provenance-statements"],
+            ))
+
+        return pkg_findings
+
+    if registry_targets:
+        batch_results = await asyncio.gather(
+            *[_check_registry(name, ver) for name, ver in registry_targets],
+            return_exceptions=True,
+        )
+        for batch in batch_results:
+            if isinstance(batch, list):
+                findings.extend(batch)
 
     return findings
 

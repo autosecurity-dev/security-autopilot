@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import aiosqlite
 
 DB_PATH = Path.home() / ".security-autopilot" / "findings.db"
+
+_DEFAULT_MAX_AGE_DAYS = 7
 
 
 async def _ensure_db() -> None:
@@ -26,27 +29,41 @@ async def _ensure_db() -> None:
                 remediation TEXT,
                 references TEXT,
                 project_path TEXT,
-                scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                scanned_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
             )
         """)
+        # Add scanned_at column to existing DBs that pre-date this migration
+        try:
+            await db.execute("ALTER TABLE findings ADD COLUMN scanned_at TEXT")
+        except Exception:
+            pass  # column already exists
         await db.commit()
 
 
 async def store(findings: list[dict], project_path: str) -> None:
     """Persist a list of findings to the local SQLite cache.
 
+    Deletes all previous findings for this project before inserting new ones
+    so the cache always reflects the latest scan and never accumulates stale rows.
+
     Args:
         findings: Normalised finding dicts from any scanner.
         project_path: The project root these findings belong to.
     """
     await _ensure_db()
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     async with aiosqlite.connect(DB_PATH) as db:
+        # Clear stale findings for this project before writing fresh ones
+        await db.execute(
+            "DELETE FROM findings WHERE project_path = ?",
+            (project_path,),
+        )
         for f in findings:
             await db.execute(
                 """INSERT OR REPLACE INTO findings
                    (id, scanner, severity, title, description, file, line,
-                    remediation, references, project_path)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    remediation, references, project_path, scanned_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     f.get("id", str(uuid.uuid4())),
                     f.get("scanner", "unknown"),
@@ -58,6 +75,7 @@ async def store(findings: list[dict], project_path: str) -> None:
                     f.get("remediation", ""),
                     json.dumps(f.get("references", [])),
                     project_path,
+                    now,
                 ),
             )
         await db.commit()
@@ -67,6 +85,7 @@ async def get_findings(
     severity: str | None = None,
     project_path: str | None = None,
     limit: int = 200,
+    max_age_days: int = _DEFAULT_MAX_AGE_DAYS,
 ) -> list[dict]:
     """Retrieve cached findings from SQLite.
 
@@ -75,6 +94,8 @@ async def get_findings(
                   If None, returns all severities.
         project_path: Filter to a specific project. If None, returns all.
         limit: Maximum number of findings to return.
+        max_age_days: Only return findings scanned within this many days.
+                      Defaults to 7. Pass 0 to disable the age filter.
 
     Returns:
         List of finding dicts ordered by severity (critical first).
@@ -92,6 +113,12 @@ async def get_findings(
     if project_path:
         conditions.append("project_path = ?")
         params.append(project_path)
+    if max_age_days > 0:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        conditions.append("(scanned_at IS NULL OR scanned_at >= ?)")
+        params.append(cutoff)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     params.append(limit)

@@ -107,7 +107,7 @@ This single command:
 
 Safe to run twice — fully idempotent.
 
-> **Telemetry:** On first run you'll be asked whether to share anonymous usage data (OS + Python version only). Opt out anytime by deleting `~/.security-autopilot/telemetry_consent`.
+> **Telemetry:** Telemetry is off by default. To opt in, set `~/.security-autopilot/telemetry_consent` to `opted_in`. Only sends OS + Python version on startup.
 
 ---
 

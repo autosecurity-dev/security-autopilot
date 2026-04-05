@@ -47,9 +47,7 @@ class _NewProjectHandler(FileSystemEventHandler):
         path = Path(event.src_path)
         if path.name in PROJECT_MARKERS:
             project_dir = str(path.parent)
-            asyncio.ensure_future(
-                _register_project(project_dir), loop=self.loop
-            )
+            asyncio.ensure_future(_register_project(project_dir))
 
 
 async def _register_project(project_path: str) -> None:

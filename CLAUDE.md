@@ -11,9 +11,10 @@ Claude Code then calls `scan_repo`, `scan_file`, `get_findings`, or
 ## Commands
 
 ```bash
-uv run pytest tests/ -v          # run all tests
-python -m mcp_server.server      # start MCP server (stdio)
-uv tool install security-autopilot  # install as CLI tool
+uv run pytest tests/ -v                    # run all tests (16 total)
+python -m mcp_server.server --version      # print version and exit
+python -m mcp_server.server                # start MCP server (stdio)
+uv tool install security-autopilot         # install as CLI tool
 ```
 
 ---
@@ -21,7 +22,7 @@ uv tool install security-autopilot  # install as CLI tool
 ## File map (every file, one line)
 
 ```
-install.sh                          one-liner installer hosted at get.securityautopilot.dev
+install.sh                          one-liner installer (raw GitHub URL — update after repo goes public)
 docs/index.html                     minimal dark landing page (pure HTML, no framework)
 schemas/finding.json                JSON Schema for a single finding — all scanners must conform
 pyproject.toml                      package config; entry point: mcp_server.server:main
@@ -127,24 +128,31 @@ Add new entries as `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
 
 ## Current status
 
-### Built
+### Built and working
 - MCP server with four tools: `scan_repo`, `scan_file`, `get_findings`, `watch_project`
 - Supply chain scanner with KNOWN_BAD blocklist, lifecycle script detection, maintainer hijack heuristics
 - Trivy, Gitleaks, Semgrep wrappers that shell out to CLI tools
 - Auto-installer (`installer.py`) for missing CLI tools — macOS (brew) + Linux (curl)
-- SQLite findings cache via `aggregator.py`
+- SQLite findings cache via `aggregator.py` — findings expire after 7 days, old scan results cleared on rescan
 - Background file watcher (`daemon/watcher.py`) + project auto-detector (`daemon/scheduler.py`)
-- Opt-in anonymous telemetry (`telemetry.py`) — PostHog, no SDK, prompted on first run
-- `install.sh` one-liner for end users
+- Auto-patch for known-malicious packages (`autopatch.py`) — semver-safe, same major only
+- Loud secret alerts with rotation instructions per service (`secret_remediation.py`)
+- Live threat feeds from OSV.dev + npm advisory API (`threat_feeds.py`, `threat_cache.py`) — 24h TTL cache
+- Self-updating daemon — checks PyPI on startup and every 24h (`updater.py`)
+- `--version` flag on the CLI
+- `install.sh` one-liner (raw GitHub URL — update after repo goes public)
 - `docs/index.html` minimal landing page
+- 16 passing tests covering supply chain, integration, and critical paths
 
 ### PostHog key not yet configured
-`mcp_server/telemetry.py` line 17 and `docs/index.html` line 9 both contain
-`YOUR_POSTHOG_KEY` — replace with the real `phc_...` key once the account is created.
+`mcp_server/telemetry.py` and `docs/index.html` contain `YOUR_POSTHOG_KEY` —
+replace with the real `phc_...` key once the account is created.
+Telemetry defaults to opted_out; no stdin reads, no prompts.
 
-### What's next (known gaps)
-- No CLI beyond the MCP server — `security-autopilot daemon start` does not exist
-- `daemon/scheduler.py` has no entry point wired to `server.py`
-- No PyPI publish yet (`uv tool install security-autopilot` will fail until published)
-- GitHub Actions CI (`ci.yml`) — verify it passes on push
-- `install.sh` tested locally but not yet on a clean Ubuntu 22 VM
+### What's next (P2 — shippable without)
+- Make repo public + set up get.securityautopilot.dev domain (update install URL in install.sh and docs/index.html)
+- Configure PostHog key for telemetry
+- `security-autopilot daemon start|stop|status` CLI commands
+- Linux desktop notifications (currently macOS-only via osascript)
+- `pip index versions` is experimental — consider replacing with PyPI JSON API for autopatch
+- `install.sh` not yet tested on a clean Ubuntu 22 VM

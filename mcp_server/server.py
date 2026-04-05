@@ -182,6 +182,16 @@ def _format_findings(findings: list[dict]) -> str:
 def main() -> None:
     """Entry point for `uvx security-autopilot`."""
     import sys
+    from importlib.metadata import version as pkg_version, PackageNotFoundError
+
+    if "--version" in sys.argv:
+        try:
+            v = pkg_version("security-autopilot")
+        except PackageNotFoundError:
+            v = "0.1.4"  # fallback when running from source
+        print(f"security-autopilot {v}")
+        sys.exit(0)
+
     check_and_ping()
     print(
         "Security Autopilot MCP server running.\n"

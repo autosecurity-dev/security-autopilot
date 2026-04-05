@@ -23,5 +23,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
       - name: Run tests
         run: uv run pytest tests/ -v

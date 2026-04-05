@@ -67,9 +67,7 @@ class _ManifestChangeHandler(FileSystemEventHandler):
                 self._debounce_task.cancel()
             self._debounce_task = self.loop.call_later(
                 2.0,
-                lambda: asyncio.ensure_future(
-                    _run_scan(self.project_path), loop=self.loop
-                ),
+                lambda: asyncio.ensure_future(_run_scan(self.project_path)),
             )
 
 
@@ -97,9 +95,9 @@ async def _run_scan(project_path: str) -> None:
         for f in new_high:
             if f["scanner"] == "supply_chain" and f["severity"] == "critical":
                 try:
-                    result = await auto_patch(project_path, f)
-                    if result and result["success"]:
-                        patch_results.append(result)
+                    patch_result = await auto_patch(project_path, f)
+                    if patch_result and patch_result["success"]:
+                        patch_results.append(patch_result)
                     else:
                         unhandled.append(f)
                 except Exception:
