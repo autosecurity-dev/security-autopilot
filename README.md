@@ -77,30 +77,19 @@ Missing a scanner? **Security Autopilot installs it for you automatically** — 
 
 ## Quick Start
 
-### 1. Install
+### 1. Install (one command)
 
 ```bash
-pip install security-autopilot
-# or
-uvx security-autopilot
+curl -fsSL https://get.securityautopilot.dev | sh
 ```
 
-### 2. Connect to Claude Code
+This installs `uv`, the MCP server, all scanner CLIs (trivy, gitleaks, semgrep), and automatically patches `~/.claude/claude.json` to register the plugin. Safe to run twice.
 
-Add this to `~/.claude/claude.json`:
+> **Telemetry:** On first run you'll be asked whether to share anonymous usage data (OS + Python version). You can opt out at any time by deleting `~/.security-autopilot/telemetry_consent`.
 
-```json
-{
-  "mcpServers": {
-    "security-autopilot": {
-      "command": "uvx",
-      "args": ["security-autopilot"]
-    }
-  }
-}
-```
+### 2. Restart Claude Code
 
-Restart Claude Code. That's it.
+That's it — no manual config needed.
 
 ### 3. Just talk to Claude
 
