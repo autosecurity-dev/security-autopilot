@@ -21,9 +21,26 @@ import httpx
 # Known-bad version blocklist
 # ---------------------------------------------------------------------------
 KNOWN_BAD: list[dict[str, str]] = [
-    {"name": "axios",          "version": "1.14.1",  "reason": "supply chain RAT March 2026 — postinstall dropper"},
-    {"name": "axios",          "version": "0.30.4",  "reason": "supply chain RAT March 2026 — postinstall dropper"},
-    {"name": "plain-crypto-js","version": "4.2.1",   "reason": "axios attack dropper — remote access trojan"},
+    {
+        "name": "axios", "version": "1.14.1",
+        "reason": "Sapphire Sleet supply chain attack March 31 2026 — deploys cross-platform RAT",
+        "cve": "N/A", "source": "Microsoft Threat Intelligence",
+    },
+    {
+        "name": "axios", "version": "0.30.4",
+        "reason": "Sapphire Sleet supply chain attack March 31 2026 — deploys cross-platform RAT",
+        "cve": "N/A", "source": "Microsoft Threat Intelligence",
+    },
+    {
+        "name": "plain-crypto-js", "version": "4.2.1",
+        "reason": "Purpose-built RAT dropper used in axios supply chain attack",
+        "cve": "N/A", "source": "Microsoft Threat Intelligence",
+    },
+    {
+        "name": "plain-crypto-js", "version": "4.2.0",
+        "reason": "Seeded decoy package from same Sapphire Sleet campaign (publishing history cover)",
+        "cve": "N/A", "source": "Microsoft Threat Intelligence",
+    },
 ]
 
 
@@ -448,5 +465,13 @@ async def scan(project_path: str) -> list[dict]:
         results = await asyncio.gather(*tasks)
         for result in results:
             findings.extend(result)
+
+    # Sapphire Sleet / axios attack pattern checks (machine + project level)
+    try:
+        from .axios_attack_pattern import run_axios_checks
+        axios_findings = await run_axios_checks(project_path)
+        findings.extend(axios_findings)
+    except Exception:
+        pass  # never block a scan
 
     return findings
