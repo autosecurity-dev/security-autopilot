@@ -188,8 +188,13 @@ def main() -> None:
         try:
             v = pkg_version("security-autopilot")
         except PackageNotFoundError:
-            v = "0.1.4"  # fallback when running from source
+            v = "0.1.5"  # fallback when running from source
         print(f"security-autopilot {v}")
+        sys.exit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "daemon":
+        from .daemon_ctl import run_daemon_command
+        run_daemon_command(sys.argv[2:])
         sys.exit(0)
 
     check_and_ping()

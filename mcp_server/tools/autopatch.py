@@ -16,6 +16,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 
 # Pattern: "Known-malicious package: axios@1.14.1"
 _TITLE_RE = re.compile(r"Known-malicious package:\s*([^@]+)@(.+)")
@@ -95,28 +97,28 @@ async def _patch_pip(project: Path, package: str, bad_version: str) -> dict | No
 
 
 async def _safe_version_pip(package: str, bad_version: str) -> str | None:
-    """Return highest safe pip version with same major as bad_version."""
-    proc = await asyncio.create_subprocess_exec(
-        "pip", "index", "versions", package,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    if proc.returncode != 0:
+    """Return highest safe pip version with same major as bad_version.
+
+    Uses the PyPI JSON API instead of `pip index versions` (experimental/removed).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"https://pypi.org/pypi/{package}/json")
+        if resp.status_code != 200:
+            return None
+        versions = list(resp.json().get("releases", {}).keys())
+    except Exception:
         return None
 
-    # Output: "package (x.y.z) Available versions: a, b, c, ..."
-    text = stdout.decode()
-    m = re.search(r"Available versions:\s*(.+)", text)
-    if not m:
-        return None
-
-    versions = [v.strip() for v in m.group(1).split(",")]
     bad_major = _major(bad_version)
-    candidates = [
-        v for v in versions
-        if _major(v) == bad_major and v != bad_version and not _is_prerelease(v)
-    ]
-    return candidates[0] if candidates else None  # pip returns newest first
+    candidates = sorted(
+        [
+            v for v in versions
+            if _major(v) == bad_major and v != bad_version and not _is_prerelease(v)
+        ],
+        key=lambda v: [int(x) for x in v.split(".")[:3] if x.isdigit()],
+    )
+    return candidates[-1] if candidates else None  # highest safe version
 
 
 def _update_requirements(req_file: Path, package: str, old_ver: str, new_ver: str) -> None:
