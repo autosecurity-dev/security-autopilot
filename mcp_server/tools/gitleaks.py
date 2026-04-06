@@ -68,6 +68,17 @@ async def scan(project_path: str) -> list[dict]:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         report_path = tmp.name
 
+    # Exclude build artifacts and dependency folders — scanning these
+    # produces overwhelming false positives (compiled JS, cache files, etc.)
+    ignore_paths = [
+        ".next", "dist", "build", "out", ".nuxt", ".output",
+        "node_modules", ".git", "__pycache__", ".venv", "venv",
+        ".tox", "coverage", ".nyc_output", "*.min.js",
+    ]
+    ignore_args: list[str] = []
+    for p in ignore_paths:
+        ignore_args += ["--ignore-path", p]
+
     proc = await asyncio.create_subprocess_exec(
         "gitleaks", "detect",
         "--source", project_path,
@@ -76,6 +87,7 @@ async def scan(project_path: str) -> list[dict]:
         "--no-git",
         "--no-banner",
         "--exit-code", "0",
+        *ignore_args,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )

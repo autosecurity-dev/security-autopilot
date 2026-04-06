@@ -328,7 +328,7 @@ async def _scan_package_lock(
 
         if _maintainer_email_changed(meta, resolved_version):
             pkg_findings.append(_finding(
-                severity="high",
+                severity="info",
                 title=f"Maintainer email changed at {pkg_name}@{resolved_version}",
                 description=(
                     f"The npm publisher email for `{pkg_name}` changed between "
