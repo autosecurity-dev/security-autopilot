@@ -347,7 +347,7 @@ async def _scan_package_lock(
             if age < timedelta(hours=COOLDOWN_HOURS):
                 hours_old = int(age.total_seconds() / 3600)
                 pkg_findings.append(_finding(
-                    severity="medium",
+                    severity="info",
                     title=f"Recently published version: {pkg_name}@{resolved_version} ({hours_old}h ago)",
                     description=(
                         f"`{pkg_name}@{resolved_version}` was published only {hours_old} hours ago, "

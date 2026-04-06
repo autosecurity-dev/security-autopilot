@@ -56,7 +56,7 @@ def _print_finding(f: dict) -> None:
         print(f"  {CYAN}Fix: {first_line}{RESET}")
 
 
-async def _run_scan(project_path: str) -> None:
+async def _run_scan(project_path: str, yes_flag: bool = False, show_all: bool = False) -> None:
     path = Path(project_path).resolve()
     if not path.exists():
         print(f"{RED}Error: path does not exist: {path}{RESET}", file=sys.stderr)
@@ -104,29 +104,41 @@ async def _run_scan(project_path: str) -> None:
         findings,
         key=lambda f: ["critical","high","medium","low","info"].index(f.get("severity","info"))
     )
-    shown = ordered[:8]  # cap at 8 for readability
+    shown = ordered if show_all else ordered[:8]
     for f in shown:
         _print_finding(f)
 
-    if len(findings) > 8:
+    if not show_all and len(findings) > 8:
         print(f"\n  {DIM}… and {len(findings) - 8} more. Run with --all to see everything.{RESET}")
 
     print(f"\n{_BAR}")
 
-    # Auto-patch prompt for critical findings
+    # Auto-patch prompt for critical supply chain findings
     critical_findings = [f for f in findings if f["severity"] == "critical"
                          and f.get("scanner") == "supply_chain"]
     if critical_findings:
-        print(f"\n{BOLD}🔧 Auto-patching critical supply chain issues…{RESET}\n")
         from mcp_server.tools.autopatch import auto_patch
         for f in critical_findings[:3]:
-            result = await auto_patch(str(path), f)
-            if result and result.get("success"):
-                print(f"  {GREEN}{BOLD}✅  {result['package']} {result['from']} → {result['to']}{RESET}")
-            elif result:
-                print(f"  {YELLOW}⚠️   {result['package']}: safe version found ({result.get('to','?')}) — run `npm install {result['package']}@{result.get('to','?')}` to apply{RESET}")
+            pkg_label = f["title"].replace("Known-malicious package: ", "")
+            if yes_flag:
+                do_patch = True
             else:
-                print(f"  {DIM}↳ {f['title'][:60]} — patch not available{RESET}")
+                try:
+                    answer = input(f"\n{BOLD}🔧 Auto-patch {RED}{pkg_label}{RESET}{BOLD}? [y/N]{RESET} ").strip().lower()
+                    do_patch = answer in ("y", "yes")
+                except (EOFError, KeyboardInterrupt):
+                    do_patch = False
+
+            if do_patch:
+                patch_result = await auto_patch(str(path), f)
+                if patch_result and patch_result.get("success"):
+                    print(f"  {GREEN}{BOLD}✅  {patch_result['package']} {patch_result['from']} → {patch_result['to']}{RESET}")
+                elif patch_result:
+                    print(f"  {YELLOW}⚠️   Safe version found ({patch_result.get('to','?')}) — run: npm install {patch_result['package']}@{patch_result.get('to','?')}{RESET}")
+                else:
+                    print(f"  {DIM}↳ patch not available for {f['title'][:60]}{RESET}")
+            else:
+                print(f"  {DIM}↳ skipped — run with --yes to auto-apply{RESET}")
 
     print()
 
@@ -134,9 +146,14 @@ async def _run_scan(project_path: str) -> None:
 def run_scan_command(args: list[str]) -> None:
     """Entry point from server.py:main() when sys.argv[1] == 'scan'."""
     if not args or args[0] in ("-h", "--help"):
-        print("Usage: security-autopilot scan <path>")
+        print("Usage: security-autopilot scan <path> [--yes] [--all]")
         print("       security-autopilot scan .            # scan current directory")
+        print("       security-autopilot scan . --yes      # auto-apply all patches (CI mode)")
+        print("       security-autopilot scan . --all      # show every finding, no cap")
         sys.exit(0)
 
-    project_path = args[0]
-    asyncio.run(_run_scan(project_path))
+    yes_flag = "--yes" in args
+    show_all = "--all" in args
+    path_args = [a for a in args if not a.startswith("--")]
+    project_path = path_args[0] if path_args else "."
+    asyncio.run(_run_scan(project_path, yes_flag=yes_flag, show_all=show_all))

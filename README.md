@@ -106,6 +106,16 @@ You can just say **"scan this project"** or **"show my security findings"** and 
 
 ## Install
 
+**Recommended — verified install via PyPI:**
+
+```bash
+uvx security-autopilot
+```
+
+This pulls a cryptographically signed build from PyPI (OIDC trusted publishing — the binary is provably built from this repo's GitHub Actions). No domain to hijack, no unsigned script.
+
+**Alternative — one-liner for convenience:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/autosecurity-dev/security-autopilot/main/install.sh | sh
 ```
@@ -113,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/autosecurity-dev/security-autopilot
 ![Security Autopilot catching axios@1.14.1 in real time](docs/demo.gif)
 > *Demo: scanning a project with axios@1.14.1 — detected and auto-patched in seconds. ([record your own](docs/RECORDING.md))*
 
-This single command:
+Either install method:
 1. Installs `uv` (Python package manager) if not present
 2. Installs `security-autopilot` from PyPI
 3. Installs `trivy`, `gitleaks`, and `semgrep` scanner CLIs
