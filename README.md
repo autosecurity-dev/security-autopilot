@@ -5,7 +5,7 @@
 ### Catches threats in your code. Fixes them automatically. Never asks you to do anything.
 
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
-[![PyPI](https://img.shields.io/badge/pypi-0.1.2-green)](https://pypi.org/project/security-autopilot/)
+[![PyPI](https://img.shields.io/badge/pypi-0.1.5-green)](https://pypi.org/project/security-autopilot/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
 
@@ -86,8 +86,14 @@ You can just say **"scan this project"** or **"show my security findings"** and 
 | 🟡 **CVEs in dependencies** | Trivy scans against the full NVD vulnerability database |
 | 🟡 **Code-level bugs** | Semgrep: SQL injection, XSS, `eval(userInput)`, 1000+ patterns |
 | 🟡 **Recently published versions** | 72-hour cooldown gate on brand-new releases |
-| 🔵 **Floating version pins** | `^` and `~` pins that allow silent upgrades |
+| 🟡 **Floating version pins** | `^` and `~` pins that allow silent upgrades |
 | 🔵 **Missing SLSA provenance** | Packages published without cryptographic build attestations |
+| 🔴 **C2 indicators in installed files** | Embedded command-and-control strings inside `node_modules` |
+| 🔴 **Post-compromise RAT artifacts** | Known filesystem/process artifacts left by the Sapphire Sleet RAT |
+| 🔴 **Transitive dependency exposure** | Packages you didn't install directly that pulled in a compromised version |
+| 🟠 **Auto-upgrade vectors** | `^`/`~` pins on axios that would silently resolve to a malicious release |
+| 🟠 **Missing lockfile** | `package.json` without a lockfile — allows runtime version resolution |
+| 🔵 **CI/CD pipeline exposure** | Pipelines using `npm install` instead of `npm ci` during the attack window |
 
 ---
 
@@ -152,8 +158,10 @@ Security Autopilot works with reduced coverage if a scanner is missing — it ne
 ## For Contributors
 
 ```bash
-uv run pytest tests/ -v        # run all tests
-python -m mcp_server.server    # start MCP server manually
+uv run pytest tests/ -v                          # run all tests (23 total)
+python -m mcp_server.server --version            # print version and exit
+python -m mcp_server.server                      # start MCP server manually
+security-autopilot daemon start|stop|status      # control the background daemon
 ```
 
 See `CLAUDE.md` for the complete project context, coding rules, and how to add a new scanner.
@@ -163,9 +171,10 @@ See `CLAUDE.md` for the complete project context, coding rules, and how to add a
 ```python
 # mcp_server/tools/supply_chain.py → KNOWN_BAD
 [
-  {"name": "axios",           "version": "1.14.1", "reason": "supply chain RAT March 2026"},
-  {"name": "axios",           "version": "0.30.4", "reason": "supply chain RAT March 2026"},
-  {"name": "plain-crypto-js", "version": "4.2.1",  "reason": "axios attack dropper"},
+  {"name": "axios",           "version": "1.14.1", "reason": "Sapphire Sleet supply chain attack March 31 2026 — deploys cross-platform RAT",     "cve": "N/A", "source": "Microsoft Threat Intelligence"},
+  {"name": "axios",           "version": "0.30.4", "reason": "Sapphire Sleet supply chain attack March 31 2026 — deploys cross-platform RAT",     "cve": "N/A", "source": "Microsoft Threat Intelligence"},
+  {"name": "plain-crypto-js", "version": "4.2.1",  "reason": "Purpose-built RAT dropper used in axios supply chain attack",                       "cve": "N/A", "source": "Microsoft Threat Intelligence"},
+  {"name": "plain-crypto-js", "version": "4.2.0",  "reason": "Seeded decoy package from same Sapphire Sleet campaign (publishing history cover)", "cve": "N/A", "source": "Microsoft Threat Intelligence"},
 ]
 ```
 
