@@ -1,0 +1,28 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"  # triggers on v0.1.6, v1.0.0, etc.
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi  # requires manual approval in GitHub before first publish
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
+        with:
+          version: "latest"
+
+      - name: Build
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # v1.12.4
+        # No username/password needed — uses OIDC trusted publishing
