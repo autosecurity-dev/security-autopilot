@@ -2,12 +2,19 @@
 
 # 🛡️ Security Autopilot
 
-### Catches threats in your code. Fixes them automatically. Never asks you to do anything.
+### Because `npm audit` wasn't enough.
 
+**Catches threats in your code. Fixes them automatically. Never asks you to do anything.**
+
+[![GitHub Stars](https://img.shields.io/github/stars/autosecurity-dev/security-autopilot?style=social)](https://github.com/autosecurity-dev/security-autopilot)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![PyPI](https://img.shields.io/badge/pypi-0.1.5-green)](https://pypi.org/project/security-autopilot/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
+
+**Works on macOS and Linux** — Windows not currently supported.
+
+⭐ **Star this repo to get notified when new attack signatures are added.**
 
 </div>
 
@@ -103,6 +110,9 @@ You can just say **"scan this project"** or **"show my security findings"** and 
 curl -fsSL https://raw.githubusercontent.com/autosecurity-dev/security-autopilot/main/install.sh | sh
 ```
 
+![Security Autopilot catching axios@1.14.1 in real time](docs/demo.gif)
+> *Demo: scanning a project with axios@1.14.1 — detected and auto-patched in seconds. ([record your own](docs/RECORDING.md))*
+
 This single command:
 1. Installs `uv` (Python package manager) if not present
 2. Installs `security-autopilot` from PyPI
@@ -119,25 +129,23 @@ Safe to run twice — fully idempotent.
 
 ## What Happens After Install
 
-```
-Install completes
-      │
-      ▼
-Daemon starts immediately
-      │
-      ├─▶ Scans all projects in ~/projects, ~/code, ~/Desktop/projects
-      │         └─▶ Desktop notification: "Scanned 8 projects — 2 critical issues found"
-      │
-      └─▶ Watches forever
-                │
-                ├─▶ You run npm install axios@1.14.1
-                │         └─▶ Detected → auto-patched to 1.14.0 → "✅ Fixed automatically"
-                │
-                ├─▶ You commit a file with an AWS key
-                │         └─▶ "🚨 SECRET EXPOSED — rotate immediately" + full steps
-                │
-                └─▶ New project appears in ~/projects
-                          └─▶ Auto-detected → scanned within 60 seconds
+```mermaid
+flowchart TD
+    A([Install completes]) --> B[Daemon starts]
+
+    B --> C[Scans all projects\nin ~/projects, ~/code, ~/Desktop/projects]
+    C --> C1[/"🔔 Scanned 8 projects — 2 critical issues found"/]
+
+    B --> D[Watches forever]
+
+    D --> E[You run npm install axios@1.14.1]
+    E --> E1[/"✅ Auto-patched: axios 1.14.1 → 1.14.0"/]
+
+    D --> F[You commit a file with an AWS key]
+    F --> F1[/"🚨 SECRET EXPOSED — rotate immediately + full steps"/]
+
+    D --> G[New project appears in ~/projects]
+    G --> G1[/"Auto-detected → scanned within 60 seconds"/]
 ```
 
 ---
@@ -190,7 +198,8 @@ MIT — free to use, modify, and distribute.
 
 <div align="center">
 
-Built in response to the **March 2026 axios supply chain attack**.  
-Because `npm audit` wasn't enough.
+Built in response to the **March 2026 axios supply chain attack**.
+
+⭐ [Star this repo](https://github.com/autosecurity-dev/security-autopilot) to get notified when new attack signatures are added.
 
 </div>
