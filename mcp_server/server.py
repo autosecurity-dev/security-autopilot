@@ -197,6 +197,11 @@ def main() -> None:
         run_daemon_command(sys.argv[2:])
         sys.exit(0)
 
+    if len(sys.argv) > 1 and sys.argv[1] == "scan":
+        from .scan_ctl import run_scan_command
+        run_scan_command(sys.argv[2:])
+        sys.exit(0)
+
     check_and_ping()
     print(
         "Security Autopilot MCP server running.\n"
