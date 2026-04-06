@@ -156,6 +156,13 @@ Add new entries as `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
 replace with the real `phc_...` key once the account is created.
 Telemetry defaults to opted_out; no stdin reads, no prompts.
 
+### Threat detection roadmap
+| Phase | What | Status |
+|---|---|---|
+| 1 | `threats/threats.json` hosted feed — manual entries go live within minutes, no PyPI release needed | Shipped |
+| 2 | GitHub Actions watchlist — checks top-60 npm packages every 30 min for suspicious new versions, opens issues for human review | Shipped |
+| 3 | Always-on VPS worker — subscribes to npm CouchDB changes feed in real time (~seconds detection lag), requires $6–12/mo server | Planned v3 |
+
 ### What's next (P2 — shippable without)
 - Set up `autosecurity.dev` domain and point to landing page
 - Configure PostHog key in `mcp_server/telemetry.py` and `docs/index.html`

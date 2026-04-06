@@ -1,0 +1,51 @@
+{
+  "version": "1",
+  "updated": "2026-04-06T00:00:00Z",
+  "description": "Security Autopilot remote threat feed. Updated within minutes of a new supply chain attack being confirmed. Fetched by the scanner on every scan (1-hour client-side cache).",
+  "threats": [
+    {
+      "name": "axios",
+      "version": "1.14.1",
+      "reason": "Sapphire Sleet supply chain attack March 31 2026 — deploys cross-platform RAT via postinstall",
+      "severity": "critical",
+      "cve": "N/A",
+      "source": "Microsoft Threat Intelligence",
+      "added": "2026-03-31T03:15:00Z",
+      "references": [
+        "https://www.microsoft.com/en-us/security/blog/2026/03/31/sapphire-sleet-npm-supply-chain-attack"
+      ]
+    },
+    {
+      "name": "axios",
+      "version": "0.30.4",
+      "reason": "Sapphire Sleet supply chain attack March 31 2026 — postinstall dropper targeting older axios users",
+      "severity": "critical",
+      "cve": "N/A",
+      "source": "Microsoft Threat Intelligence",
+      "added": "2026-03-31T03:15:00Z",
+      "references": [
+        "https://www.microsoft.com/en-us/security/blog/2026/03/31/sapphire-sleet-npm-supply-chain-attack"
+      ]
+    },
+    {
+      "name": "plain-crypto-js",
+      "version": "4.2.1",
+      "reason": "Purpose-built RAT dropper used in axios Sapphire Sleet supply chain attack",
+      "severity": "critical",
+      "cve": "N/A",
+      "source": "Microsoft Threat Intelligence",
+      "added": "2026-03-31T03:15:00Z",
+      "references": []
+    },
+    {
+      "name": "plain-crypto-js",
+      "version": "4.2.0",
+      "reason": "Seeded decoy package from same Sapphire Sleet campaign — published to build a credible version history",
+      "severity": "critical",
+      "cve": "N/A",
+      "source": "Microsoft Threat Intelligence",
+      "added": "2026-03-31T03:15:00Z",
+      "references": []
+    }
+  ]
+}

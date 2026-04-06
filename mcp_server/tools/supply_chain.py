@@ -18,6 +18,38 @@ from typing import Any
 import httpx
 
 # ---------------------------------------------------------------------------
+# Remote threat feed
+# ---------------------------------------------------------------------------
+_REMOTE_FEED_URL = (
+    "https://raw.githubusercontent.com/autosecurity-dev/security-autopilot"
+    "/main/threats/threats.json"
+)
+_remote_feed_cache: list[dict] = []
+_remote_feed_fetched_at: datetime | None = None
+_REMOTE_FEED_TTL = timedelta(hours=1)
+
+
+async def _fetch_remote_threat_feed() -> list[dict]:
+    """Fetch threats/threats.json from the repo with a 1-hour in-memory cache.
+
+    Returns an empty list on any network or parse failure — never blocks a scan.
+    """
+    global _remote_feed_cache, _remote_feed_fetched_at
+    now = datetime.now(timezone.utc)
+    if _remote_feed_fetched_at and (now - _remote_feed_fetched_at) < _REMOTE_FEED_TTL:
+        return _remote_feed_cache
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(_REMOTE_FEED_URL)
+        if resp.status_code == 200:
+            _remote_feed_cache = resp.json().get("threats", [])
+            _remote_feed_fetched_at = now
+    except Exception as exc:
+        print(f"[supply_chain] remote feed fetch failed: {exc}", file=__import__("sys").stderr)
+    return _remote_feed_cache
+
+
+# ---------------------------------------------------------------------------
 # Known-bad version blocklist
 # ---------------------------------------------------------------------------
 KNOWN_BAD: list[dict[str, str]] = [
@@ -45,15 +77,22 @@ KNOWN_BAD: list[dict[str, str]] = [
 
 
 async def _get_known_bad() -> list[dict]:
-    """Return merged blocklist: hardcoded KNOWN_BAD + live-cached threats (24h TTL)."""
+    """Return merged blocklist from three sources (highest → lowest priority):
+
+    1. KNOWN_BAD — hardcoded, always present
+    2. Remote threats.json — fetched from GitHub, 1-hour cache, updated within
+       minutes of a new attack being confirmed (no package release needed)
+    3. threat_cache — OSV.dev + npm advisory API, 24-hour cache
+    """
     try:
         from .threat_cache import load_cached_threats
         cached = await load_cached_threats()
     except Exception:
         cached = []
+    remote = await _fetch_remote_threat_feed()
     seen: set[tuple[str, str]] = {(e["name"], e["version"]) for e in KNOWN_BAD}
     merged = list(KNOWN_BAD)
-    for entry in cached:
+    for entry in (*remote, *cached):
         key = (entry["name"], entry["version"])
         if key not in seen:
             seen.add(key)
