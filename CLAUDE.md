@@ -22,7 +22,7 @@ uv tool install security-autopilot         # install as CLI tool
 ## File map (every file, one line)
 
 ```
-install.sh                          one-liner installer (raw GitHub URL — update after repo goes public)
+install.sh                          one-liner installer (https://raw.githubusercontent.com/autosecurity-dev/security-autopilot/main/install.sh)
 docs/index.html                     minimal dark landing page (pure HTML, no framework)
 schemas/finding.json                JSON Schema for a single finding — all scanners must conform
 pyproject.toml                      package config; entry point: mcp_server.server:main
@@ -147,7 +147,7 @@ Add new entries as `{"name": "pkg", "version": "x.y.z", "reason": "..."}`.
 - Live threat feeds from OSV.dev + npm advisory API (`threat_feeds.py`, `threat_cache.py`) — 24h TTL cache
 - Self-updating daemon — checks PyPI on startup and every 24h (`updater.py`)
 - `--version` flag on the CLI
-- `install.sh` one-liner (raw GitHub URL — update after repo goes public)
+- `install.sh` one-liner — repo is public at `autosecurity-dev/security-autopilot`
 - `docs/index.html` minimal landing page
 - 23 passing tests covering supply chain, axios attack patterns, integration, and critical paths
 
@@ -157,9 +157,7 @@ replace with the real `phc_...` key once the account is created.
 Telemetry defaults to opted_out; no stdin reads, no prompts.
 
 ### What's next (P2 — shippable without)
-- Make repo public + set up get.securityautopilot.dev domain (update install URL in install.sh and docs/index.html)
-- Configure PostHog key for telemetry
-- `security-autopilot daemon start|stop|status` CLI commands
+- Set up `autosecurity.dev` domain and point to landing page
+- Configure PostHog key in `mcp_server/telemetry.py` and `docs/index.html`
 - Linux desktop notifications (currently macOS-only via osascript)
-- `pip index versions` is experimental — consider replacing with PyPI JSON API for autopatch
 - `install.sh` not yet tested on a clean Ubuntu 22 VM
