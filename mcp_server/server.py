@@ -202,6 +202,15 @@ def main() -> None:
         run_scan_command(sys.argv[2:])
         sys.exit(0)
 
+    # No arguments — detect context:
+    # - TTY (human ran it directly) → auto-scan their projects
+    # - pipe/stdin (Claude Code MCP) → start MCP server
+    if len(sys.argv) == 1:
+        if sys.stdin.isatty():
+            from .first_run import run_first_run
+            asyncio.run(run_first_run())
+            sys.exit(0)
+
     check_and_ping()
     print(
         "Security Autopilot MCP server running.\n"
