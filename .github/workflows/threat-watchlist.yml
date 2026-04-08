@@ -6,7 +6,7 @@ on:
   workflow_dispatch:          # allow manual runs from the Actions tab
 
 permissions:
-  contents: write   # commit last-seen.json updates
+  contents: write   # push last-seen.json to watchlist-state branch
   issues: write     # open alerts when something suspicious is found
 
 jobs:
@@ -14,7 +14,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout main (scripts + watchlist.json)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Checkout watchlist-state branch (last-seen.json state)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: watchlist-state
+          path: watchlist-state
+        continue-on-error: true  # branch won't exist on first run
+
+      - name: Restore last-seen.json
+        run: |
+          if [ -f watchlist-state/threats/last-seen.json ]; then
+            cp watchlist-state/threats/last-seen.json threats/last-seen.json
+            echo "Restored last-seen.json from watchlist-state branch"
+          else
+            echo "No prior state found — first run, starting fresh"
+          fi
 
       - name: Run watchlist checker
         run: python .github/scripts/watchlist_checker.py
@@ -22,10 +39,30 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
-      - name: Commit last-seen updates
+      - name: Push last-seen to watchlist-state branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add threats/last-seen.json
-          git diff --staged --quiet || git commit -m "chore(watchlist): update last-seen versions [skip ci]"
-          git push
+
+          if [ -d watchlist-state/.git ]; then
+            # Branch already existed — update it
+            cp threats/last-seen.json watchlist-state/threats/last-seen.json
+            cd watchlist-state
+            git add threats/last-seen.json
+            git diff --staged --quiet || git commit -m "chore(watchlist): update last-seen versions [skip ci]"
+            git push origin HEAD:watchlist-state
+          else
+            # First run — create orphan branch with just the state file
+            mkdir -p /tmp/ws-init
+            cd /tmp/ws-init
+            git init
+            git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git checkout --orphan watchlist-state
+            mkdir -p threats
+            cp "$GITHUB_WORKSPACE/threats/last-seen.json" threats/last-seen.json
+            git add threats/last-seen.json
+            git commit -m "chore(watchlist): initialize last-seen state [skip ci]"
+            git push origin watchlist-state
+          fi
