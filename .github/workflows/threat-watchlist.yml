@@ -48,6 +48,7 @@ jobs:
 
           if [ -d watchlist-state/.git ]; then
             # Branch already existed — update it
+            mkdir -p watchlist-state/threats
             cp threats/last-seen.json watchlist-state/threats/last-seen.json
             cd watchlist-state
             git add threats/last-seen.json
