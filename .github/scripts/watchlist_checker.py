@@ -259,7 +259,9 @@ def main() -> int:
     for pkg, new_ver, old_ver, flags in suspicious:
         open_github_issue(pkg, new_ver, old_ver, flags)
 
-    return 1 if suspicious else 0
+    # Always exit 0 — suspicious findings are reported via GitHub issues.
+    # Exiting 1 marks the job as failed and triggers email spam.
+    return 0
 
 
 if __name__ == "__main__":
