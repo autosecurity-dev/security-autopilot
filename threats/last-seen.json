@@ -34,7 +34,7 @@
   "mongoose": "9.5.0",
   "morgan": "1.10.1",
   "multer": "2.1.1",
-  "mysql2": "3.22.2",
+  "mysql2": "3.22.3",
   "next": "16.2.4",
   "node-fetch": "3.3.2",
   "node-ipc": "12.0.0",
