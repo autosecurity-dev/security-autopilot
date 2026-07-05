@@ -19,7 +19,7 @@
   "express": "5.2.1",
   "express-session": "1.19.0",
   "faker": "6.6.6",
-  "fastify": "5.9.0",
+  "fastify": "5.10.0",
   "glob": "13.0.6",
   "got": "15.1.0",
   "helmet": "8.2.0",
