@@ -55,7 +55,7 @@
   "superagent": "10.3.0",
   "svelte": "5.56.4",
   "ts-node": "10.9.2",
-  "typescript": "6.0.3",
+  "typescript": "7.0.2",
   "ua-parser-js": "2.0.10",
   "underscore": "1.13.8",
   "vite": "8.1.3",
