@@ -35,7 +35,7 @@
   "morgan": "1.11.0",
   "multer": "2.2.0",
   "mysql2": "3.24.2",
-  "next": "16.3.2",
+  "next": "16.3.3",
   "node-fetch": "3.3.2",
   "node-ipc": "14.0.0",
   "nodemailer": "9.0.5",
