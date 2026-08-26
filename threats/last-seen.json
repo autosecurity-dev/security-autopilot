@@ -1,7 +1,7 @@
 {
   "@babel/core": "8.0.1",
   "async": "3.2.6",
-  "axios": "1.19.0",
+  "axios": "1.20.0",
   "bcrypt": "6.0.0",
   "bluebird": "3.7.2",
   "chalk": "6.0.0",
