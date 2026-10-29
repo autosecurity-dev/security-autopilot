@@ -1,5 +1,5 @@
 {
-  "@babel/core": "8.0.9",
+  "@babel/core": "8.0.10",
   "async": "3.2.6",
   "axios": "1.21.0",
   "bcrypt": "6.0.0",
